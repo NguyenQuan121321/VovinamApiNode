@@ -1,0 +1,175 @@
+// VovinamApiNode — initial schema: auth tables (plan section 5.2), app settings, belt ranks.
+// Domain tables land with their phases: students/classes (P2), exams (P3), billing (P4),
+// notifications/consent (P5). Financial tables will use ON DELETE RESTRICT; users rows are
+// soft-delete only (plan 7.2) — no hard delete anywhere.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  INSTRUCTOR
+  STUDENT
+  PARENT
+}
+
+enum UsedTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+  CHANGE_EMAIL
+}
+
+enum BeltRankGroup {
+  LAM
+  VANG
+  DO
+  HUYEN
+}
+
+/// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
+/// never a hard DELETE, so every FK below uses onDelete: Restrict.
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  role                UserRole  @default(STUDENT)
+  emailVerifiedAt     DateTime? @map("email_verified_at")
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  pwdVersion          Int       @default(1) @map("pwd_version")
+  isActive            Boolean   @default(true) @map("is_active")
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  sessions          Session[]
+  refreshTokens     RefreshToken[]
+  totpCredential    TotpCredential?
+  recoveryCodes     RecoveryCode[]
+  usedTokens        UsedToken[]
+  auditLogs         AuditLog[]
+  appSettingUpdates AppSetting[] @relation("AppSettingUpdatedBy")
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  ip           String?
+  userAgent    String?  @map("user_agent")
+  deviceName   String?  @map("device_name")
+  revoked      Boolean  @default(false)
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  /// SHA-256 hash of the opaque 256-bit token; raw token is never stored (plan 4.1).
+  tokenHash String   @unique @map("token_hash")
+  revoked   Boolean  @default(false)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// TOTP secrets sealed with AES-256-GCM using APP_ENCRYPTION_KEY (plan 4.1).
+model TotpCredential {
+  userId          String   @id @map("user_id") @db.Uuid
+  secretEncrypted Bytes    @map("secret_encrypted")
+  enabledAt       DateTime @map("enabled_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("totp_credentials")
+}
+
+model RecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("recovery_codes")
+}
+
+/// Single-use guard for verify-email / reset-password / change-email tokens (plan 5.1).
+/// expiresAt drives the purge job.
+model UsedToken {
+  jti       String           @id
+  userId    String           @map("user_id") @db.Uuid
+  purpose   UsedTokenPurpose
+  expiresAt DateTime         @map("expires_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt])
+  @@map("used_tokens")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    String?  @map("user_id") @db.Uuid
+  event     String   @db.VarChar(50)
+  ip        String?
+  success   Boolean
+  detail    String?  @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+/// Key-value club configuration: bank_account (owner_type BUSINESS), tuition_rates,
+/// gateway references (plan sections 6, 7.5, 10). Seeded values are defaults; the club
+/// master confirms real data before go-live (plan risk register).
+model AppSetting {
+  key       String   @id @db.VarChar(50)
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  updatedByUser User? @relation("AppSettingUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+
+  @@map("app_settings")
+}
+
+model BeltRank {
+  id         Int           @id @default(autoincrement())
+  code       String        @unique
+  name       String        @db.VarChar(100)
+  rankGroup  BeltRankGroup @map("rank_group")
+  orderIndex Int           @unique @map("order_index")
+  isActive   Boolean       @default(true) @map("is_active")
+
+  @@map("belt_ranks")
+}
