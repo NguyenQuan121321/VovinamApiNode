@@ -9,6 +9,9 @@ coverage/
 .env.*
 !.env.example
 
+# Agent-local instructions (not part of the shipped repository)
+.agents/
+
 # Logs and temp files
 *.log
 tmp/
