@@ -18,11 +18,13 @@ export class SealService {
     this.key = Buffer.from(hex, 'hex');
   }
 
-  seal(plain: Uint8Array): Buffer {
+  seal(plain: Uint8Array): Uint8Array {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
     const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
-    return Buffer.concat([iv, encrypted, cipher.getAuthTag()]);
+    // Copy into a plain Uint8Array (ArrayBuffer-backed): newer @types/node narrow
+    // Buffer to Uint8Array<ArrayBufferLike>, which Prisma's Bytes field rejects.
+    return new Uint8Array(Buffer.concat([iv, encrypted, cipher.getAuthTag()]));
   }
 
   unseal(sealed: Uint8Array): Buffer {
