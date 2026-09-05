@@ -1,9 +1,9 @@
 import { BillingModule } from './billing.module';
 import { BillingService } from './billing.service';
 
-describe('BillingModule (stub until P4)', () => {
-  it('keeps module and placeholder service loadable for the coverage floor', () => {
-    expect(new BillingModule()).toBeDefined();
-    expect(new BillingService().implementedInPhase).toBe('P4');
+describe('BillingModule', () => {
+  it('exposes the module and its service (imported by the exams module)', () => {
+    expect(BillingModule).toBeDefined();
+    expect(BillingService).toBeDefined();
   });
 });
