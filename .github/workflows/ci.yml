@@ -16,7 +16,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -29,7 +29,7 @@ jobs:
     name: secrets-scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Scan full git history for leaked secrets
@@ -41,7 +41,7 @@ jobs:
     name: sast (semgrep)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run Semgrep security rules (OWASP top ten, TypeScript, secrets)
         id: sast
         run: |
@@ -81,7 +81,7 @@ jobs:
     name: build-test (typecheck, unit, coverage gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -112,7 +112,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://vovinam:vovinam@localhost:5432/vovinam_migrate?schema=public
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -153,7 +153,7 @@ jobs:
       JWT_SECRET: ci-jwt-secret-0123456789abcdef0123456789abcdef
       APP_ENCRYPTION_KEY: abababababababababababababababababababababababababababababababab
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -185,7 +185,7 @@ jobs:
     name: audit (npm audit high)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -197,7 +197,7 @@ jobs:
     name: container-scan (trivy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build image
         run: docker build -t vovinam-api:ci .
       - name: Scan image for HIGH/CRITICAL vulnerabilities
@@ -229,7 +229,7 @@ jobs:
     name: tech-debt-gate (extraneous deps, outdated report)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -251,7 +251,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build image
         run: docker build -t vovinam-api:ci .
 
