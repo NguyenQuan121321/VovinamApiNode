@@ -31,9 +31,11 @@ describe('TotpService', () => {
     expect(service.verifyCode('u-1', secret, '000000')).toBe(false);
   });
 
-  it('accepts ±1 step skew but not more (pinned clock — no boundary races)', () => {
+  it('accepts ±1 step skew but not more (fixed epoch — zero clock reads)', () => {
     const secret = authenticator.generateSecret();
-    const nowMs = Date.now();
+    // Fixed epoch far from any wall clock: the test reads Date.now() never, so no
+    // environment (CI runner, Node version, timer mocks) can shift the step grid.
+    const nowMs = 1_700_000_000_000;
     const prevCode = authenticator
       .create({ ...authenticator.options, window: 0, epoch: nowMs - 31_000 })
       .generate(secret);
