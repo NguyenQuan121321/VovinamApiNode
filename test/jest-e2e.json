@@ -7,7 +7,7 @@
     "^.+\\.ts$": "ts-jest"
   },
   "setupFiles": ["<rootDir>/test/e2e/e2e-env.ts"],
-  "reporters": ["default", ["<rootDir>/test/annotation-reporter.js"]],
+  "reporters": ["default", "<rootDir>/test/annotation-reporter.js"],
   "testEnvironment": "node",
   "testTimeout": 30000
 }

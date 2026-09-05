@@ -30,8 +30,12 @@ export class SealService {
     const tag = sealed.subarray(sealed.length - 16);
     const ciphertext = sealed.subarray(12, sealed.length - 16);
     const decipher = createDecipheriv('aes-256-gcm', this.key, iv);
-    // Explicit tag length: GCM accepts variable tag sizes, so pin 16 bytes (full).
-    decipher.setAuthTag(tag, 16);
+    // Pin the GCM auth tag to 16 bytes: variable-length tags weaken authentication.
+    // Node's runtime accepts the explicit length; @types/node does not model it yet.
+    (decipher as unknown as { setAuthTag(tag: Uint8Array, length: number): void }).setAuthTag(
+      tag,
+      16,
+    );
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   }
 }
