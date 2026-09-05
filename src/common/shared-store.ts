@@ -26,8 +26,10 @@ export class InMemorySharedStore implements SharedStore, OnModuleDestroy {
   private readonly entries = new Map<string, SharedStoreEntry>();
   private readonly sweeper: NodeJS.Timeout;
 
-  constructor(sweepIntervalMs = 60_000) {
-    this.sweeper = setInterval(() => this.sweep(), sweepIntervalMs);
+  constructor() {
+    // No constructor parameters: with useClass DI every param would be treated as
+    // an injectable dependency and fail resolution.
+    this.sweeper = setInterval(() => this.sweep(), 60_000);
     this.sweeper.unref();
   }
 
