@@ -38,6 +38,13 @@ export const AUDIT_EVENTS = [
   'enrollment_removed',
   'attendance_session_created',
   'attendance_recorded',
+  'belt_rank_created',
+  'belt_rank_updated',
+  'belt_exam_created',
+  'belt_exam_updated',
+  'exam_registration_created',
+  'exam_result_recorded',
+  'invoice_issued',
 ] as const;
 
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];
