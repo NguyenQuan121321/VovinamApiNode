@@ -58,7 +58,7 @@ jobs:
             --exclude-rule generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash \
             --exclude-rule javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
           echo "exitcode=$?" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: semgrep-report
@@ -174,7 +174,7 @@ jobs:
             done
           fi
           exit $EXIT
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-output
@@ -207,7 +207,7 @@ jobs:
             --ignore-unfixed --scanners vuln --severity HIGH,CRITICAL \
             --skip-files "/usr/local/lib/node_modules/npm/**" \
             --format json --output /report/trivy-report.json vovinam-api:ci
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-report
