@@ -1,0 +1,5 @@
+# Trivy image-scan suppressions (review quarterly; remove when fixed upstream).
+# CVE-2026-14456: openssl/libcrypto3 QUIC DoS — fixed in alpine 3.5.8-r0; the
+# node:22-alpine base image ships an older openssl and is refreshed upstream.
+# Our API terminates TLS at the reverse proxy and never opens QUIC sockets.
+CVE-2026-14456

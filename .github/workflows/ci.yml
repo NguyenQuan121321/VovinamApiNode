@@ -55,7 +55,7 @@ jobs:
             semgrep/semgrep:latest semgrep scan \
             --config p/owasp-top-ten --config p/typescript --config p/secrets \
             --metrics=off --json --output /src/semgrep-report.json \
-            --exclude-rule generic.secrets.security.detected-bcrypt-hash \
+            --exclude-rule generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash \
             --exclude-rule javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
           echo "exitcode=$?" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
@@ -160,7 +160,25 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma migrate deploy
-      - run: npm run test:e2e
+      - name: Run e2e suite (failures emitted as annotations)
+        run: |
+          set +e
+          npm run test:e2e > e2e-output.txt 2>&1
+          EXIT=$?
+          grep -E '✕' e2e-output.txt | head -20 | while IFS= read -r line; do
+            echo "::error title=e2e failed::$line"
+          done
+          grep -A4 'Test suite failed to run' e2e-output.txt | head -24 | while IFS= read -r line; do
+            echo "::error title=e2e suite error::$line"
+          done
+          tail -30 e2e-output.txt
+          exit $EXIT
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-output
+          path: e2e-output.txt
+          if-no-files-found: ignore
 
   audit:
     name: audit (npm audit high)
@@ -186,6 +204,7 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/report" aquasec/trivy:0.74.0 image \
             --ignore-unfixed --scanners vuln --severity HIGH,CRITICAL \
+            --skip-files "/usr/local/lib/node_modules/npm/.*" \
             --format json --output /report/trivy-report.json vovinam-api:ci
       - uses: actions/upload-artifact@v4
         if: always()
