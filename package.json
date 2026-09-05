@@ -32,7 +32,6 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/swagger": "^11.0.0",
-    "@prisma/client": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -49,6 +48,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
+    "@prisma/client": "^6.12.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.0",
@@ -57,7 +57,7 @@
     "eslint-config-prettier": "^9.1.0",
     "jest": "^29.7.0",
     "prettier": "^3.4.2",
-    "prisma": "^6.0.0",
+    "prisma": "^6.12.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
@@ -65,9 +65,9 @@
     "typescript-eslint": "^8.20.0"
   },
   "allowScripts": {
-    "prisma@6.19.3": true,
     "@prisma/client@6.19.3": true,
-    "@prisma/engines@6.19.3": true,
-    "@scarf/scarf": false
+    "@scarf/scarf": false,
+    "prisma@6.12.0": true,
+    "@prisma/engines@6.12.0": true
   }
 }
