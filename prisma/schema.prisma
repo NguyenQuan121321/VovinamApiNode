@@ -1,6 +1,7 @@
 // VovinamApiNode — schema: auth tables (plan section 5.2), app settings, belt ranks,
-// and the P2 domain core (students/parents/classes/enrollments/attendance).
-// Later tables land with their phases: exams (P3), billing (P4), notifications/consent (P5).
+// the P2 domain core (students/parents/classes/enrollments/attendance), and the P3
+// exams/belts tables with the invoice chain the exam flow issues (plan sections 6, 8).
+// Remaining tables land with their phases: billing payments (P4), notifications (P5).
 // Financial tables will use ON DELETE RESTRICT; users rows are soft-delete only
 // (plan 7.2) — no hard delete anywhere.
 
@@ -64,6 +65,37 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+enum ExamStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ExamRegistrationStatus {
+  PENDING_PAYMENT
+  PAID
+  RESULT_PASS
+  RESULT_FAIL
+  CANCELLED
+}
+
+enum InvoiceType {
+  TUITION
+  EXAM_FEE
+  UNIFORM
+  OTHER
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
 /// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
 /// never a hard DELETE, so every FK below uses onDelete: Restrict.
 model User {
@@ -93,6 +125,8 @@ model User {
   taughtClasses      Class[]             @relation("ClassInstructor")
   attendedSessions   AttendanceSession[] @relation("SessionInstructor")
   recordedAttendance AttendanceRecord[]  @relation("AttendanceRecorder")
+  examinedResults    ExamRegistration[]  @relation("ExamExaminer")
+  createdInvoices    Invoice[]           @relation("InvoiceCreator")
 
   @@map("users")
 }
@@ -209,7 +243,10 @@ model BeltRank {
   orderIndex Int           @unique @map("order_index")
   isActive   Boolean       @default(true) @map("is_active")
 
-  students StudentProfile[]
+  students                 StudentProfile[]
+  exams                    BeltExam[]         @relation("ExamTargetRank")
+  currentRankRegistrations ExamRegistration[] @relation("RegistrationCurrentRank")
+  targetRankRegistrations  ExamRegistration[] @relation("RegistrationTargetRank")
 
   @@map("belt_ranks")
 }
@@ -241,6 +278,8 @@ model StudentProfile {
   parentLinks       ParentStudentLink[]
   enrollments       Enrollment[]
   attendanceRecords AttendanceRecord[]
+  examRegistrations ExamRegistration[]
+  invoices          Invoice[]
 
   @@map("student_profiles")
 }
@@ -361,4 +400,106 @@ model AttendanceRecord {
 
   @@unique([attendanceSessionId, studentId])
   @@map("attendance_records")
+}
+
+/// A belt grading event (plan section 6). Registration is only possible while
+/// status is OPEN and before registrationDeadline.
+model BeltExam {
+  id                   String     @id @default(uuid()) @db.Uuid
+  code                 String     @unique @db.VarChar(30)
+  title                String     @db.VarChar(150)
+  examDate             DateTime   @map("exam_date") @db.Date
+  location             String?    @db.VarChar(255)
+  targetRankId         Int        @map("target_rank_id")
+  targetRank           BeltRank   @relation("ExamTargetRank", fields: [targetRankId], references: [id])
+  /// VND integer, no decimals.
+  feeAmount            Int        @map("fee_amount")
+  /// NULL = no cap.
+  capacity             Int?
+  registrationDeadline DateTime   @map("registration_deadline") @db.Date
+  status               ExamStatus @default(DRAFT)
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+
+  registrations ExamRegistration[]
+
+  @@index([examDate])
+  @@map("belt_exams")
+}
+
+/// One student registered for one exam (plan section 6). On RESULT_PASS the
+/// student's current_belt_rank_id is promoted to the exam's target rank.
+model ExamRegistration {
+  id            String                 @id @default(uuid()) @db.Uuid
+  examId        String                 @map("exam_id") @db.Uuid
+  exam          BeltExam               @relation(fields: [examId], references: [id], onDelete: Restrict)
+  studentId     String                 @map("student_id") @db.Uuid
+  student       StudentProfile         @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  /// Rank held at registration time (NULL = beginner with no rank yet).
+  currentRankId Int?                   @map("current_rank_id")
+  currentRank   BeltRank?              @relation("RegistrationCurrentRank", fields: [currentRankId], references: [id])
+  targetRankId  Int                    @map("target_rank_id")
+  targetRank    BeltRank               @relation("RegistrationTargetRank", fields: [targetRankId], references: [id])
+  status        ExamRegistrationStatus @default(PENDING_PAYMENT)
+  resultNote    String?                @map("result_note") @db.VarChar(500)
+  /// Who judged the exam; defaults to the caller recording the result.
+  examinerId    String?                @map("examiner_id") @db.Uuid
+  examiner      User?                  @relation("ExamExaminer", fields: [examinerId], references: [id])
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  invoices Invoice[]
+
+  @@unique([examId, studentId])
+  @@index([studentId])
+  @@map("exam_registrations")
+}
+
+/// Financial record (plan sections 6, 7.5): never hard-deleted; payments arrive
+/// in P4. invoice_no is human-readable and sequential per year (INV-2026-0001).
+model Invoice {
+  id                    String            @id @default(uuid()) @db.Uuid
+  invoiceNo             String            @unique @map("invoice_no") @db.VarChar(20)
+  studentId             String            @map("student_id") @db.Uuid
+  student               StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  type                  InvoiceType
+  /// Set when the invoice was auto-issued for an exam registration (P3).
+  refExamRegistrationId String?           @map("ref_exam_registration_id") @db.Uuid
+  refExamRegistration   ExamRegistration? @relation(fields: [refExamRegistrationId], references: [id])
+  /// TUITION period only (month 1-12).
+  periodMonth           Int?              @map("period_month")
+  periodYear            Int?              @map("period_year")
+  /// VND integers; total = subtotal - discount.
+  subtotal              Int
+  discount              Int               @default(0)
+  total                 Int
+  status                InvoiceStatus     @default(UNPAID)
+  dueDate               DateTime          @map("due_date") @db.Date
+  issuedAt              DateTime          @default(now()) @map("issued_at")
+  note                  String?           @db.VarChar(500)
+  createdBy             String            @map("created_by") @db.Uuid
+  createdByUser         User              @relation("InvoiceCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  items InvoiceItem[]
+
+  @@index([studentId])
+  @@index([status])
+  @@map("invoices")
+}
+
+/// Line items of an invoice (plan section 6); cascade only with their invoice.
+model InvoiceItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  invoiceId   String  @map("invoice_id") @db.Uuid
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String  @db.VarChar(255)
+  quantity    Int
+  unitAmount  Int     @map("unit_amount")
+  /// quantity * unitAmount.
+  amount      Int
+
+  @@index([invoiceId])
+  @@map("invoice_items")
 }
