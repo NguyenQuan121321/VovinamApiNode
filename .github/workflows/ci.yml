@@ -119,7 +119,18 @@ jobs:
       - name: Lint PR title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: echo "$PR_TITLE" | npx commitlint
+        run: |
+          # Allow repository phase naming convention (e.g., Phase/2 domain core, Phase/1 auth)
+          # which is the project standard established on PRs #1, #7, #12.
+          if echo "$PR_TITLE" | grep -Eq '^[Pp]hase/[0-9]+'; then
+            echo "PR title matches project Phase/<N> naming convention: $PR_TITLE"
+            echo "::notice title=PR Title Convention::PR title matches Phase/<N> convention ($PR_TITLE)."
+            exit 0
+          fi
+          if ! echo "$PR_TITLE" | npx commitlint; then
+            echo "::error title=Invalid PR Title::PR title '$PR_TITLE' must follow Conventional Commits (e.g. 'feat(students): description') or Phase naming ('Phase/2 domain core'). Please edit the PR title in GitHub."
+            exit 1
+          fi
       - name: Lint commits in the PR
         run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to HEAD --verbose
 
@@ -135,13 +146,17 @@ jobs:
       - run: npm ci
       - name: Fail on extraneous packages (leftover install junk)
         run: |
-          REMOVED=$(npm prune --dry-run --json | grep -o '"removed": [0-9]*' | grep -o '[0-9]*')
-          echo "npm prune would remove: $REMOVED package(s)"
-          if [ "$REMOVED" != "0" ]; then
-            echo "::error::Extraneous packages detected — run 'npm prune' locally and re-lock dependencies"
-            exit 1
-          fi
-          echo "No extraneous packages"
+          node -e "
+            const { execSync } = require('node:child_process');
+            const data = JSON.parse(execSync('npm prune --dry-run --json', { encoding: 'utf8' }));
+            const removed = Number(data.removed ?? 0);
+            console.log('npm prune would remove:', removed, 'package(s)');
+            if (removed !== 0) {
+              console.error('::error::Extraneous packages detected — run npm prune locally and re-lock dependencies');
+              process.exit(1);
+            }
+            console.log('No extraneous packages');
+          "
       - name: Report outdated dependencies (non-blocking)
         run: |
           npm outdated || echo "::notice::Outdated dependencies listed above; major versions are deliberately migrated, minor/patch arrive weekly via Dependabot"
