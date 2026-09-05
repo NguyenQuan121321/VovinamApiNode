@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P1 Auth + hardened CI/CD — PR #7 (`phase/1-auth`) FULLY GREEN (10/10 checks incl. secrets-scan, SAST, container-scan, tech-debt, coverage gate). Awaiting owner squash-merge.**
+Current status: **P2 students/parents core IMPLEMENTED on branch `phase/2-domain-core` (2fa1780) — all gates green locally; PR #7 (P1+CI/CD) still awaits owner merge.**
 
 ## Phase task table
 
@@ -23,6 +23,14 @@ Current status: **P1 Auth + hardened CI/CD — PR #7 (`phase/1-auth`) FULLY GREE
 | P3–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-06 — Session 7: branch audit + P2 roles/students implemented
+- Branch audit per user request: main 7/7 green; PR #7 10/10 green (the build-test failure on e74d819 was a one-off flake that did not recur — a unit annotation reporter is now wired so any repeat names itself). Closed all 5 Dependabot PRs by deleting their head branches via git (they were unmergeable major bumps against the old pipeline; Dependabot can regenerate, and the new ignore config prevents the major ones).
+- P2 first increment on `phase/2-domain-core` (2fa1780), schema migration `20260905164753_add_student_profiles_and_links` created with `prisma migrate dev` against WSL Postgres (role vovinam got CREATEDB for the shadow DB).
+- Endpoints: GET /students/me (STUDENT self view — the web-info ask), GET /students + POST + PATCH + DELETE + POST /:id/invite-code (ADMIN), GET /students/:id (ownership guard 7.3: ADMIN full, STUDENT self, PARENT verified link, INSTRUCTOR 404 until classes exist), POST /parents/link + GET /parents/me/children + DELETE /parents/links/:id (PARENT; verified unlink requires the club). Serializer 7.4: instructors lose contact fields, keep medical notes; invite code 8 chars from an unambiguous alphabet, rotated after use.
+- Lessons repeated: every feature module using JwtAuthGuard MUST import AuthModule (Students/Parents modules initially missed it — UnknownDependenciesException at boot); jest reporter config takes the bare string form; soft-deleting a profile deactivates the linked account, so the old token dies with 401 (route 404 is unreachable for that user).
+- Evidence: 142/142 unit (global coverage 86.57%), 24/24 e2e (new students-roles suite covers admin CRUD, student self-view, parent link/unlink, S-01/S-04 404s, soft delete), lint/typecheck/format/build green.
+- Next: owner merges PR #7 (P1+CI/CD); then push a PR for phase/2-domain-core. P2 remainder: classes/schedules/enrollments/attendance (activates the INSTRUCTOR ownership clause), audit events for student mutations.
 
 ### 2026-09-05 — Session 6: PR #7 fully green (10/10) after security-gate debugging
 - The user opened PR #7 (phase/1-auth → main). First CI run: 4 new jobs failed; debugged WITHOUT Actions log access (unauthenticated) by making the pipeline self-reporting — Semgrep and Trivy write JSON reports uploaded as artifacts and mirror findings as `::error` annotations (readable via the public API); e2e failures mirror their full output as annotations too.
