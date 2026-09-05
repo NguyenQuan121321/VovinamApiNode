@@ -67,7 +67,8 @@ jobs:
         run: npx prisma migrate deploy
       - name: Assert all expected tables exist
         run: |
-          TABLE_COUNT=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','sessions','refresh_tokens','totp_credentials','recovery_codes','used_tokens','audit_logs','app_settings','belt_ranks','_prisma_migrations')")
+          # Plain libpq URI: psql rejects Prisma's ?schema=public query parameter.
+          TABLE_COUNT=$(psql "postgresql://vovinam:vovinam@localhost:5432/vovinam_migrate" -t -A -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','sessions','refresh_tokens','totp_credentials','recovery_codes','used_tokens','audit_logs','app_settings','belt_ranks','_prisma_migrations')")
           echo "Expected tables found: $TABLE_COUNT"
           test "$TABLE_COUNT" -eq 10
       - name: Verify migrations replay cleanly from scratch
