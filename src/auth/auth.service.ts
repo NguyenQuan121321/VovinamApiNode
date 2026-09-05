@@ -40,7 +40,7 @@ const BCRYPT_COST = 10;
  * Fixed bcrypt hash used when the account does not exist so that wrong-password and
  * unknown-user logins take the same time (anti-enumeration, plan 4.1 / S-09).
  */
-const DUMMY_BCRYPT_HASH = '$2b$10$NhGOVd9LBjmyZWLYA9Lg7.uHTwsOtrAbH.64DYbRgVKWS5MuWl9ii';
+const DUMMY_BCRYPT_HASH = '$2b$10$NhGOVd9LBjmyZWLYA9Lg7.uHTwsOtrAbH.64DYbRgVKWS5MuWl9ii'; // nosemgrep: generic.secrets.security.detected-bcrypt-hash
 const VERIFY_EMAIL_TTL_SECONDS = 86_400;
 const RESET_PASSWORD_TTL_SECONDS = 900;
 const USED_TOKEN_RETENTION_MS = 7 * 86_400_000;
