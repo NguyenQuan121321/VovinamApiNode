@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P2 students/parents + 10-job CI/CD extended with 4 more gates — on branch `phase/2-domain-core`, all green locally (142 unit / 24 e2e). PR #7 (P1) merged by owner; main CI had one flaky build-test (TOTP step-boundary — fixed with pinned-clock verification).**
+Current status: **PR #12 (`phase/2-domain-core`) at 13/14 green — only `commitlint` red because the PR TITLE is not a Conventional Commit. Owner renames the title, then merges.**
 
 ## Phase task table
 
@@ -23,6 +23,16 @@ Current status: **P2 students/parents + 10-job CI/CD extended with 4 more gates 
 | P3–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-06 — Session 9: full CI/CD audit — every failure traced to a concrete bug, all fixed
+- User asked for a full CI/CD audit ("lỗi tùm lum"). Verdict: the pipeline LOGIC is correct (layering, needs-chain, least-privilege permissions, gha cache, self-reporting annotations). Every failure traced to a specific defect, in order:
+  1. `build-test` flake → TOTP skew test raced the 30s step boundary → made epoch-deterministic (fixed epoch, zero clock reads; hammer-tested 0/2000 failures, then CI-verified).
+  2. `integration`/`contract-gate` red again → the ci.yml rewrite reintroduced a 62-char APP_ENCRYPTION_KEY (joi requires exactly 64). Values now generated programmatically; verified.
+  3. `docker`/`container-scan` → TWO stacked bugs: (a) npm install re-serialized package.json and silently REVERTED the earlier move of prisma/@prisma/client into dependencies (both were back in devDependencies → `npm ci --omit=dev` had no CLI: postinstall exited 127, and the image would have shipped without @prisma/client). Fixed via JSON edit; verified by simulating the prod-deps stage locally (exit 0, CLI present). (b) `--ignore-scripts` had also skipped the engine binaries download. Both gone: prod-deps runs plain `npm ci --omit=dev` with the CLI as a dependency.
+  4. `commitlint` red on PR #12 → the PR TITLE "Phase/2 domain core" is not a Conventional Commit. OWNER ACTION: rename the title (e.g. `feat(students): role-scoped student profiles and parent invite-code linking`).
+- Final PR #12 state at 2e2dcf7: 13/14 green (docker and container-scan now pass with prisma in the image); deploy+smoke correctly skipped on PRs.
+- Dependabot PRs #8–#11 still open (cut from old main): close AFTER #12 merges; the merged ignore rules then keep future groups clean.
+- Lesson recorded: never hand-edit generated version strings in manifests — use JSON edits, and re-simulate Docker stages locally before pushing.
 
 ### 2026-09-06 — Session 8: new CI/CD wave (contract, license, commitlint, smoke) + flake fix
 - Owner merged PR #7; main's build-test then failed ONCE: the TOTP skew unit test races the 30s step boundary (code generated 31s ago, verified against the wall clock). Fixed: TotpService.verifyCode accepts an optional pinned nowMs (production default Date.now()); the test pins both sides. Dependabot config validation error fixed: group update-types must be `version-update:semver-minor/patch`.
