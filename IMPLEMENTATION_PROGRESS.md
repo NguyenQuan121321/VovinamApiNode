@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P1 Auth implementation COMPLETE on branch `phase/1-auth` (ce258f5) — local gates green; awaiting PR (owner opens it, CI runs on the PR).**
+Current status: **P1 Auth + hardened CI/CD — PR #7 (`phase/1-auth`) FULLY GREEN (10/10 checks incl. secrets-scan, SAST, container-scan, tech-debt, coverage gate). Awaiting owner squash-merge.**
 
 ## Phase task table
 
@@ -23,6 +23,18 @@ Current status: **P1 Auth implementation COMPLETE on branch `phase/1-auth` (ce25
 | P3–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-05 — Session 6: PR #7 fully green (10/10) after security-gate debugging
+- The user opened PR #7 (phase/1-auth → main). First CI run: 4 new jobs failed; debugged WITHOUT Actions log access (unauthenticated) by making the pipeline self-reporting — Semgrep and Trivy write JSON reports uploaded as artifacts and mirror findings as `::error` annotations (readable via the public API); e2e failures mirror their full output as annotations too.
+- Root causes fixed, one per iteration (commits 1aba857 → 6dddf2f):
+  1. `secrets-scan`: gitleaks flagged FAKE test/CI credentials (generic-api-key rule) → `.gitleaks.toml` allowlist (multi-line TOML regex does NOT work — single-line `paths` regex + `regexes` for placeholder values). Verified locally with the gitleaks Windows binary before pushing.
+  2. `sast`: two documented false positives excluded by full rule id (`--exclude-rule` needs the DOUBLED registry id, e.g. `generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash`): the dummy-bcrypt timing constant and the GCM rule (setAuthTag length is pinned via a type cast; also fixed for real by passing authTagLength=16 — runtime supports it, @types/node 22 does not).
+  3. `docker` + `container-scan`: trivy findings were (a) npm's OWN bundled dependencies under `/usr/local/lib/node_modules/npm/**` (never executed at runtime → `--skip-files`), (b) alpine openssl CVE → `.trivyignore` with justification (base image refresh pending), and (c) the Dockerfile's `npm prune --omit=dev` leaving transitive DEV dependencies in the image → replaced with a dedicated `npm ci --omit=dev --ignore-scripts` stage + version-pinned `npx prisma@6.12.0 generate` (prisma CLI is a devDependency; postinstall would fail otherwise).
+  4. `tech-debt-gate`: npm prints warning/funding lines that defeated text filtering → now parses `npm prune --dry-run --json` (`removed` must be 0).
+  5. `integration`: the APP_ENCRYPTION_KEY in the job env was 62 chars (joi requires exactly 64) — local runs passed because setupFiles generates a valid key via `??=` and CI's invalid value preempted it. Fixed to 64. ALSO: a jest reporter misconfiguration (`["path"]` array form) aborted the whole e2e suite earlier — the string form is correct.
+- Final PR #7 state: 10/10 green (audit, build-test w/ coverage gate, container-scan, deploy-skipped, docker, integration, lint, migration-dry-run, sast, secrets-scan, tech-debt-gate), `mergeable_state: clean`.
+- Dependabot: 5 open PRs (2,3,4,5,6) predate the new `ignore` config — PR #5 (@nestjs/config 12) is genuinely RED (requires Nest 12); PRs 2/3 are major bumps that happen to pass; PRs 4/6 are @types majors. Recommend owner closes all five (or keeps #4 if @types/supertest v7 types are wanted); the new dependabot.yml prevents future major PRs and groups minor/patch weekly.
+- Next: owner squash-merges PR #7 → pull main → start P2 (`phase/2-domain-core`).
 
 ### 2026-09-05 — Session 5: P1 implemented end-to-end; CI/CD hardening; Dependabot triage
 - **CI/CD additions (user request):** secrets-scan (gitleaks, full history), sast (Semgrep p/owasp-top-ten + p/typescript + p/secrets), container-scan (Trivy HIGH/CRITICAL, ignore-unfixed), tech-debt-gate (`npm prune --dry-run` fails on extraneous packages; `npm outdated` reported non-blocking), coverage gate kept in build-test (jest thresholds), Dependabot config: weekly, grouped minor/patch, `ignore` on ALL semver-major bumps (majors are deliberate migrations — this is what should have prevented the two problematic PRs), github-actions ecosystem added; deploy job now requires all security jobs. depcheck was evaluated and REJECTED (false positives on NestJS decorator DI — joi/pino/etc. listed unused); documented here to avoid re-litigating.
