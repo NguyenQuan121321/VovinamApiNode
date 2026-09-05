@@ -1,7 +1,8 @@
-// VovinamApiNode — initial schema: auth tables (plan section 5.2), app settings, belt ranks.
-// Domain tables land with their phases: students/classes (P2), exams (P3), billing (P4),
-// notifications/consent (P5). Financial tables will use ON DELETE RESTRICT; users rows are
-// soft-delete only (plan 7.2) — no hard delete anywhere.
+// VovinamApiNode — schema: auth tables (plan section 5.2), app settings, belt ranks,
+// and the P2 domain core (students/parents/classes/enrollments/attendance).
+// Later tables land with their phases: exams (P3), billing (P4), notifications/consent (P5).
+// Financial tables will use ON DELETE RESTRICT; users rows are soft-delete only
+// (plan 7.2) — no hard delete anywhere.
 
 generator client {
   provider = "prisma-client-js"
@@ -50,6 +51,19 @@ enum LinkRelationship {
   GUARDIAN
 }
 
+enum ClassStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  EXCUSED
+}
+
 /// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
 /// never a hard DELETE, so every FK below uses onDelete: Restrict.
 model User {
@@ -66,16 +80,19 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  sessions          Session[]
-  refreshTokens     RefreshToken[]
-  totpCredential    TotpCredential?
-  recoveryCodes     RecoveryCode[]
-  usedTokens        UsedToken[]
-  auditLogs         AuditLog[]
-  appSettingUpdates AppSetting[] @relation("AppSettingUpdatedBy")
-  studentProfile    StudentProfile?
-  parentLinks       ParentStudentLink[] @relation("ParentLink")
-  verifiedLinks     ParentStudentLink[] @relation("LinkVerifier")
+  sessions           Session[]
+  refreshTokens      RefreshToken[]
+  totpCredential     TotpCredential?
+  recoveryCodes      RecoveryCode[]
+  usedTokens         UsedToken[]
+  auditLogs          AuditLog[]
+  appSettingUpdates  AppSetting[]        @relation("AppSettingUpdatedBy")
+  studentProfile     StudentProfile?
+  parentLinks        ParentStudentLink[] @relation("ParentLink")
+  verifiedLinks      ParentStudentLink[] @relation("LinkVerifier")
+  taughtClasses      Class[]             @relation("ClassInstructor")
+  attendedSessions   AttendanceSession[] @relation("SessionInstructor")
+  recordedAttendance AttendanceRecord[]  @relation("AttendanceRecorder")
 
   @@map("users")
 }
@@ -221,7 +238,9 @@ model StudentProfile {
   createdAt             DateTime      @default(now()) @map("created_at")
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
-  parentLinks ParentStudentLink[]
+  parentLinks       ParentStudentLink[]
+  enrollments       Enrollment[]
+  attendanceRecords AttendanceRecord[]
 
   @@map("student_profiles")
 }
@@ -229,19 +248,117 @@ model StudentProfile {
 /// Parent-child link through a single-use invite code (plan 7.1). Direct entry of
 /// student ids is never accepted.
 model ParentStudentLink {
-  id               String          @id @default(uuid()) @db.Uuid
-  parentUserId     String          @map("parent_user_id") @db.Uuid
-  parent           User            @relation("ParentLink", fields: [parentUserId], references: [id], onDelete: Cascade)
-  studentId        String          @map("student_id") @db.Uuid
-  student          StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id               String           @id @default(uuid()) @db.Uuid
+  parentUserId     String           @map("parent_user_id") @db.Uuid
+  parent           User             @relation("ParentLink", fields: [parentUserId], references: [id], onDelete: Cascade)
+  studentId        String           @map("student_id") @db.Uuid
+  student          StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   relationship     LinkRelationship @default(PARENT)
-  verified         Boolean         @default(false)
-  verifiedByUserId String?         @map("verified_by_user_id") @db.Uuid
-  verifiedByUser   User?           @relation("LinkVerifier", fields: [verifiedByUserId], references: [id])
-  createdAt        DateTime        @default(now()) @map("created_at")
+  verified         Boolean          @default(false)
+  verifiedByUserId String?          @map("verified_by_user_id") @db.Uuid
+  verifiedByUser   User?            @relation("LinkVerifier", fields: [verifiedByUserId], references: [id])
+  createdAt        DateTime         @default(now()) @map("created_at")
 
   @@unique([parentUserId, studentId])
   @@index([parentUserId])
   @@index([studentId])
   @@map("parent_student_links")
+}
+
+/// A training class taught by one instructor (plan section 6). "Deleting" a class
+/// means ARCHIVED via PATCH — enrollment/attendance history must survive.
+model Class {
+  id           String      @id @default(uuid()) @db.Uuid
+  name         String      @db.VarChar(100)
+  instructorId String      @map("instructor_id") @db.Uuid
+  instructor   User        @relation("ClassInstructor", fields: [instructorId], references: [id], onDelete: Restrict)
+  location     String?     @db.VarChar(255)
+  capacity     Int         @default(30)
+  status       ClassStatus @default(ACTIVE)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  schedules          ClassSchedule[]
+  enrollments        Enrollment[]
+  attendanceSessions AttendanceSession[]
+
+  @@index([instructorId])
+  @@map("classes")
+}
+
+/// Recurring weekly time slot. TIME columns carry time-of-day only; Prisma maps
+/// them to Date values on the 1970-01-01 epoch, so the API layer converts to/from
+/// "HH:mm" strings and never exposes raw Dates (plan section 6).
+model ClassSchedule {
+  id            String    @id @default(uuid()) @db.Uuid
+  classId       String    @map("class_id") @db.Uuid
+  class         Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  /// 0 = Sunday .. 6 = Saturday (Postgres DOW convention).
+  weekday       Int       @db.SmallInt
+  startTime     DateTime  @map("start_time") @db.Time(0)
+  endTime       DateTime  @map("end_time") @db.Time(0)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+
+  @@index([classId])
+  @@map("class_schedules")
+}
+
+/// One enrollment period per row (a student may leave and rejoin later, which the
+/// exact-timestamp unique tolerates). The service additionally rejects a second
+/// open or same-day enrollment per (student, class) — the plan's
+/// UQ(student_id, class_id, enrolled_at::date) semantics (plan section 6).
+model Enrollment {
+  id         String         @id @default(uuid()) @db.Uuid
+  studentId  String         @map("student_id") @db.Uuid
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId    String         @map("class_id") @db.Uuid
+  class      Class          @relation(fields: [classId], references: [id], onDelete: Restrict)
+  enrolledAt DateTime       @default(now()) @map("enrolled_at")
+  /// NULL while the student is in the class; removal sets this (soft leave).
+  leftAt     DateTime?      @map("left_at")
+
+  @@unique([studentId, classId, enrolledAt])
+  @@index([classId])
+  @@index([studentId])
+  @@map("enrollments")
+}
+
+/// One held lesson: a class on a specific date (plan section 6).
+model AttendanceSession {
+  id           String   @id @default(uuid()) @db.Uuid
+  classId      String   @map("class_id") @db.Uuid
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Restrict)
+  sessionDate  DateTime @map("session_date") @db.Date
+  /// Who taught the session: the instructor taking attendance, or the class
+  /// instructor when an admin creates the session.
+  instructorId String   @map("instructor_id") @db.Uuid
+  instructor   User     @relation("SessionInstructor", fields: [instructorId], references: [id], onDelete: Restrict)
+  topic        String?  @db.VarChar(200)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  records AttendanceRecord[]
+
+  @@unique([classId, sessionDate])
+  @@index([instructorId])
+  @@map("attendance_sessions")
+}
+
+/// Per-student attendance for one session; re-submitting overwrites via upsert
+/// (plan section 8: bulk upsert).
+model AttendanceRecord {
+  id                  String            @id @default(uuid()) @db.Uuid
+  attendanceSessionId String            @map("attendance_session_id") @db.Uuid
+  session             AttendanceSession @relation(fields: [attendanceSessionId], references: [id], onDelete: Cascade)
+  studentId           String            @map("student_id") @db.Uuid
+  student             StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  status              AttendanceStatus
+  note                String?           @db.VarChar(200)
+  recordedBy          String            @map("recorded_by") @db.Uuid
+  recordedByUser      User              @relation("AttendanceRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  @@unique([attendanceSessionId, studentId])
+  @@map("attendance_records")
 }
