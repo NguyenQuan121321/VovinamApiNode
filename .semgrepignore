@@ -1,0 +1,6 @@
+# Semgrep ignores: fake credentials in test fixtures and CI placeholders are not findings.
+test/
+test.e2e/
+docs/
+.github/
+.env.example

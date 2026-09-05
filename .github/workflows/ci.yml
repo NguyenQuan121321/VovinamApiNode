@@ -35,7 +35,7 @@ jobs:
       - name: Scan full git history for leaked secrets
         run: |
           docker run --rm -v "$PWD:/repo" --workdir /repo \
-            ghcr.io/gitleaks/gitleaks:v8.24.3 detect --source /repo --verbose --redact
+            ghcr.io/gitleaks/gitleaks:v8.30.1 detect --source /repo --verbose --redact
 
   sast:
     name: sast (semgrep)
@@ -45,7 +45,7 @@ jobs:
       - name: Run Semgrep security rules (OWASP top ten, TypeScript, secrets)
         run: |
           docker run --rm -v "$PWD:/src" --workdir /src \
-            returntocorp/semgrep:latest semgrep scan \
+            semgrep/semgrep:latest semgrep scan \
             --config p/owasp-top-ten --config p/typescript --config p/secrets \
             --error --metrics=off
 
@@ -123,7 +123,7 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: postgresql://vovinam:vovinam@localhost:5432/vovinam_test?schema=public
       JWT_SECRET: ci-jwt-secret-0123456789abcdef0123456789abcdef
-      APP_ENCRYPTION_KEY: abababababababababababababababababababababababababababababababab
+      APP_ENCRYPTION_KEY: ababababababababababababababababababababababababababababababab
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -156,11 +156,11 @@ jobs:
       - name: Scan image for HIGH/CRITICAL vulnerabilities
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image --exit-code 1 --ignore-unfixed \
-            --severity HIGH,CRITICAL vovinam-api:ci
+            aquasec/trivy:0.74.0 image --exit-code 1 --ignore-unfixed \
+            --scanners vuln --severity HIGH,CRITICAL vovinam-api:ci
 
   tech-debt-gate:
-    name: tech-debt-gate (unused deps, outdated report)
+    name: tech-debt-gate (extraneous deps, outdated report)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -171,9 +171,10 @@ jobs:
       - run: npm ci
       - name: Fail on extraneous packages (leftover install junk)
         run: |
-          PRUNE_OUTPUT=$(npm prune --dry-run)
-          if [ "$PRUNE_OUTPUT" != "up to date" ] && [ -n "$PRUNE_OUTPUT" ]; then
-            echo "$PRUNE_OUTPUT"
+          # Clean output is "up to date in <n>s"; anything else lists extraneous packages.
+          PRUNE_NOISE=$(npm prune --dry-run | grep -v '^up to date' | grep -v '^$' || true)
+          if [ -n "$PRUNE_NOISE" ]; then
+            echo "$PRUNE_NOISE"
             echo "::error::Extraneous packages detected — remove them and re-lock dependencies"
             exit 1
           fi

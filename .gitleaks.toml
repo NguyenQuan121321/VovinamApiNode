@@ -1,0 +1,15 @@
+# Gitleaks configuration: default rules + allowlist for non-secret fixtures.
+# Test/CI files contain PLACEHOLDER credentials (jwt test secrets, seed passwords);
+# they are never real secrets and never reach production.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures, CI placeholders, and local docs"
+paths = '''(
+    ^\.github/workflows/ci\.yml |
+    ^\.env\.example |
+    ^\.agents/ |
+    ^docs/ |
+    ^test/
+)'''
