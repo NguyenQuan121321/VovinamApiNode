@@ -1,11 +1,22 @@
 /**
- * Emits one GitHub annotation per failed test so CI results stay reviewable
- * without Actions log access (public-repo annotations are readable via the API).
+ * Emits one GitHub annotation per failed test AND per failed suite so CI results
+ * stay reviewable without Actions log access (annotations are readable via the API).
  */
 class AnnotationReporter {
   onRunComplete(_contexts, results) {
     for (const suite of results.testResults) {
       const relative = suite.testFilePath.replace(/^.*[\\/]test[\\/]/, 'test/');
+
+      if (suite.testExecError !== undefined || suite.failureMessage !== undefined) {
+        const detail = String(suite.failureMessage ?? suite.testExecError)
+          .split('\n')
+          .slice(0, 4)
+          .join(' | ')
+          .slice(0, 160);
+        process.stdout.write(`::error file=${relative},line=1,title=Suite failed::${detail}\n`);
+        continue;
+      }
+
       for (const testCase of suite.testResults.filter((t) => t.status === 'failed')) {
         const firstFailure = (testCase.failureMessages && testCase.failureMessages[0]) || '';
         const location = /(?:at .+?)?(\d+):\d+/.exec(firstFailure);
