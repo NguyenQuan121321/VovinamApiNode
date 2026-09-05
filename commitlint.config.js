@@ -17,6 +17,7 @@ module.exports = {
         'parents',
         'classes',
         'belts',
+        'exams',
         'billing',
         'notifications',
         'consent',

@@ -16,6 +16,8 @@ import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { ClassesModule } from './classes/classes.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { BeltsModule } from './belts/belts.module';
+import { ExamsModule } from './exams/exams.module';
 import { StudentsModule } from './students/students.module';
 import { ParentsModule } from './parents/parents.module';
 
@@ -31,6 +33,8 @@ import { ParentsModule } from './parents/parents.module';
     BillingModule,
     ClassesModule,
     AttendanceModule,
+    BeltsModule,
+    ExamsModule,
     StudentsModule,
     ParentsModule,
   ],
