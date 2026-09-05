@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P0 bootstrap COMPLETE on branch `phase/0-bootstrap` (awaiting PR + CI + merge).**
+Current status: **P0 bootstrap COMPLETE — PR #1 fully green (6/6 CI checks), awaiting squash merge by the owner.**
 
 ## Phase task table
 
@@ -27,6 +27,18 @@ Current status: **P0 bootstrap COMPLETE on branch `phase/0-bootstrap` (awaiting 
 | P1–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-05 — Session 4: CI green on PR #1, P0 ready to merge
+- Fixed the three CI failures reported on PR #1 (commit e908a27 was still red: integration + migration-dry-run + audit):
+  - `audit`: deepmerge-ts high advisory via prisma 6.19 → pinned `prisma` + `@prisma/client` to **6.12.0** (audit clean, engines realigned, client regenerated).
+  - `migration-dry-run`: psql rejected Prisma's `?schema=public` query param in `$DATABASE_URL` → assertion now uses a plain libpq URI (commit d9c615b).
+  - `integration`: root cause found by standing up a local Postgres (WSL2 Ubuntu, `postgresql://vovinam:vovinam@localhost:5432/vovinam`) and running the e2e suite: `InMemorySharedStore(sweepIntervalMs = 60_000)` — Nest resolves every `useClass` provider constructor param as an injectable dependency → `UnknownDependenciesException` at boot, hidden because `NestFactory.create(logger: false)` lets `ExceptionsZone` call a silent `process.exit(1)`. Fixed by removing the param (52ba476) and keeping error/warn logging until pino takes over (780ff00).
+  - e2e env defaults moved to `test/e2e/e2e-env.ts` (setupFiles) because `ConfigModule.forRoot(validate)` evaluates at module import, before `beforeAll`; shared unit setup stays hermetic so `ConfigService` cannot fall back to ambient env.
+- Local evidence: format:check ✓, lint ✓ (max-warnings 0), typecheck ✓, unit 50/50 with coverage floors ✓, **e2e 8/8 against real Postgres** ✓, build ✓.
+- CI on PR #1 (commit 780ff00): lint ✓, build-test ✓, migration-dry-run ✓, integration ✓, audit ✓, docker ✓; deploy skipped as designed. `mergeable_state: clean`.
+- **Action required from owner: squash-merge PR #1** (https://github.com/NguyenQuan121321/VovinamApiNode/pull/1), delete the branch, then `git checkout main && git pull` locally. Optionally tag `v0.1.0`.
+- Next phase: P1 Auth on branch `phase/1-auth` (plan section 5): register/login with uniform 401 + dummy-bcrypt equalization, refresh rotation + reuse detection, sessions, TOTP (AES-256-GCM sealed, shared failure bucket), recovery codes, used_tokens single-use flows, audit log + me/audit-log, new-IP alert. Infra (SharedStore, JWT config, tables, pino, envelope) already in place. First admin seed exists for testing ADMIN enforcement.
+- Local Postgres note: WSL2 Ubuntu now has PostgreSQL 18 running on :5432 (role/db `vovinam`/`vovinam`, TCP open for Windows) — used for e2e until Docker Desktop works.
 
 ### 2026-09-05 — Session 3: P0 finished, pushed, PR pending manual open
 - Continued from the session-2 handoff below; wrote all remaining source per the locked design decisions (no re-derivation).
