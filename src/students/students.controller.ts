@@ -31,9 +31,9 @@ export class StudentsController {
   }
 
   @Get()
-  @Roles('ADMIN')
-  list(@Query() query: ListStudentsQueryDto) {
-    return this.students.list(query);
+  @Roles('ADMIN', 'INSTRUCTOR')
+  list(@CurrentUser() user: AuthenticatedUser, @Query() query: ListStudentsQueryDto) {
+    return this.students.list(user, query);
   }
 
   @Post()

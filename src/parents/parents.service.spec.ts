@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ParentsService } from './parents.service';
+import { AuditService } from '../auth/audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const studentProfile = {
@@ -43,7 +44,8 @@ function makeService(prisma: PrismaMock) {
       ? Promise.all(arg as Promise<unknown>[])
       : (arg as (tx: unknown) => unknown)(prisma),
   );
-  return new ParentsService(prisma as unknown as PrismaService);
+  const audit = { record: jest.fn() };
+  return new ParentsService(prisma as unknown as PrismaService, audit as unknown as AuditService);
 }
 
 describe('ParentsService', () => {

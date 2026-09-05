@@ -26,6 +26,18 @@ export const AUDIT_EVENTS = [
   'mfa_recovery_used',
   'account_deactivated',
   'account_locked',
+  'student_profile_created',
+  'student_profile_updated',
+  'student_profile_deleted',
+  'student_invite_regenerated',
+  'parent_link_created',
+  'parent_link_removed',
+  'class_created',
+  'class_updated',
+  'enrollment_created',
+  'enrollment_removed',
+  'attendance_session_created',
+  'attendance_recorded',
 ] as const;
 
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];

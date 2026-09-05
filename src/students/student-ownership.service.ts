@@ -10,9 +10,7 @@ import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
  * - ADMIN: full access.
  * - STUDENT: only the profile linked to their own account.
  * - PARENT: only profiles linked through a verified parent_student_links row.
- * - INSTRUCTOR: only students enrolled in a class they teach (no classes exist
- *   until the classes increment, so instructors get 404 for now — the clause is
- *   implemented in one place so it activates with the classes tables).
+ * - INSTRUCTOR: only students currently enrolled in a class they teach.
  */
 @Injectable()
 export class StudentOwnershipService {
@@ -49,10 +47,17 @@ export class StudentOwnershipService {
       return link !== null;
     }
     if (caller.role === 'INSTRUCTOR') {
-      // Classes/enrollments arrive with the classes increment; until then instructors
-      // can access no student profiles (uniform 404, S-04 semantics). The enrollment
-      // check belongs here so the guard never needs changing again.
-      return false;
+      // Only students currently enrolled in a class this instructor teaches
+      // (plan 7.3). Past enrollments do not count.
+      const enrollment = await this.prisma.enrollment.findFirst({
+        where: {
+          studentId,
+          leftAt: null,
+          class: { instructorId: caller.id },
+        },
+        select: { id: true },
+      });
+      return enrollment !== null;
     }
     return false;
   }

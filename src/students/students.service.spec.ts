@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { StudentsService, generateInviteCode } from './students.service';
 import { StudentOwnershipService } from './student-ownership.service';
+import { AuditService } from '../auth/audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 
@@ -40,20 +41,21 @@ function makePrismaMock() {
     user: { findUnique: jest.fn(), updateMany: jest.fn() },
     beltRank: { findUnique: jest.fn() },
     parentStudentLink: { findMany: jest.fn() },
+    enrollment: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() },
     $transaction: jest.fn(),
   };
 }
 
 type PrismaMock = ReturnType<typeof makePrismaMock>;
 
-function makeService(prisma: PrismaMock) {
+function makeService(prisma: PrismaMock, audit: AuditService) {
   prisma.$transaction.mockImplementation(async (arg: unknown) =>
     Array.isArray(arg)
       ? Promise.all(arg as Promise<unknown>[])
       : (arg as (tx: unknown) => unknown)(prisma),
   );
   const ownership = new StudentOwnershipService(prisma as unknown as PrismaService);
-  return new StudentsService(prisma as unknown as PrismaService, ownership);
+  return new StudentsService(prisma as unknown as PrismaService, ownership, audit);
 }
 
 const createDto = {
@@ -66,10 +68,12 @@ const createDto = {
 describe('StudentsService', () => {
   let prisma: PrismaMock;
   let service: StudentsService;
+  let auditRecord: jest.Mock;
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    service = makeService(prisma);
+    auditRecord = jest.fn();
+    service = makeService(prisma, { record: auditRecord } as unknown as AuditService);
   });
 
   it('generates unambiguous 8-char invite codes', () => {
@@ -113,12 +117,29 @@ describe('StudentsService', () => {
     );
   });
 
-  it('lists non-deleted profiles with pagination', async () => {
+  it('lists non-deleted profiles with pagination (ADMIN scope)', async () => {
     prisma.studentProfile.findMany.mockResolvedValue([profile]);
     prisma.studentProfile.count.mockResolvedValue(1);
-    const page = await service.list({ page: 1, limit: 20 });
+    const page = await service.list(admin, { page: 1, limit: 20 });
     expect(page).toMatchObject({ total: 1, page: 1, limit: 20 });
+    expect(page.items[0]).toMatchObject({ fullName: 'Nguyen Van B', phone: '0901112223' });
+  });
+
+  it('scopes the list to own-class students for instructors (plan 7.3/8)', async () => {
+    prisma.studentProfile.findMany.mockResolvedValue([profile]);
+    prisma.studentProfile.count.mockResolvedValue(1);
+    const instructor = {
+      id: 'inst-1',
+      role: 'INSTRUCTOR',
+      sessionId: 's',
+      jti: 'j',
+    } as AuthenticatedUser;
+    const page = await service.list(instructor, { page: 1, limit: 20 });
+    // Instructors see no contact fields (serializer 7.4).
     expect(page.items[0]).toMatchObject({ fullName: 'Nguyen Van B' });
+    expect(page.items[0]).not.toHaveProperty('phone');
+    const where = prisma.studentProfile.findMany.mock.calls[0][0].where;
+    expect(where.enrollments.some.class).toEqual({ instructorId: 'inst-1' });
   });
 
   it('updates an existing profile and validates the belt rank', async () => {
@@ -139,12 +160,15 @@ describe('StudentsService', () => {
     );
   });
 
-  it('soft-deletes once and deactivates the linked account', async () => {
+  it('soft-deletes once, deactivates the linked account, and audits the mutation', async () => {
     prisma.studentProfile.updateMany.mockResolvedValue({ count: 1 });
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
     await expect(service.softDelete('sp-1')).resolves.toEqual({ deleted: true });
     expect(prisma.user.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+    );
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'student_profile_deleted', success: true }),
     );
 
     prisma.studentProfile.updateMany.mockResolvedValue({ count: 0 });

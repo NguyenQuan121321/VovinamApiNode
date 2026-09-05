@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../auth/audit/audit.service';
 import { serializeStudent } from '../students/serialize-student';
 import type { LinkChildDto } from '../students/dto/students.dto';
 
@@ -21,7 +22,10 @@ function generateCode(): string {
  */
 @Injectable()
 export class ParentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async linkChild(parentUserId: string, dto: LinkChildDto): Promise<Record<string, unknown>> {
     const profile = await this.prisma.studentProfile.findFirst({
@@ -52,6 +56,11 @@ export class ParentsService {
         data: { inviteCode: await this.rotateCode(profile.inviteCode) },
       }),
     ]);
+    this.audit.record({
+      event: 'parent_link_created',
+      success: true,
+      detail: `student_profile:${profile.id} parent:${parentUserId}`,
+    });
     return serializeStudent(profile, 'PARENT');
   }
 
@@ -78,6 +87,11 @@ export class ParentsService {
       throw new ConflictException('Contact the club to unlink a verified child');
     }
     await this.prisma.parentStudentLink.delete({ where: { id: link.id } });
+    this.audit.record({
+      event: 'parent_link_removed',
+      success: true,
+      detail: `student_profile:${studentId} parent:${parentUserId}`,
+    });
     return { unlinked: true };
   }
 
