@@ -14,9 +14,11 @@ updates:
       # Minor/patch flow automatically in one weekly PR; majors go through the
       # tech-debt report and a deliberate migration instead of an auto PR.
       minor-and-patch:
+        patterns:
+          - "*"
         update-types:
-          - version-update:semver-minor
-          - version-update:semver-patch
+          - minor
+          - patch
     ignore:
       - dependency-name: "*"
         update-types:

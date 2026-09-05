@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **PR #12 (`phase/2-domain-core`) 100% green (13/13 passing checks, mergeable_state: clean) on commit `2b5d99b`. All CI/CD pipeline issues diagnosed, fixed, and verified in GitHub Actions.**
+Current status: **PR #12 (`phase/2-domain-core`) MERGED into `main` (merge commit `08a153d`). CI/CD on `main` 100% green (all 14 workflow jobs passed). Dependabot syntax fix committed to `main` to resolve GitHub's native Dependabot validator.**
 
 ## Phase task table
 
@@ -19,10 +19,20 @@ Current status: **PR #12 (`phase/2-domain-core`) 100% green (13/13 passing check
 | P1 | E2E: lifecycle + S-05/S-07/S-08/S-09/S-12 in test/security/ | DONE (ce258f5) | 18/18 e2e green vs real Postgres; MAIL_LOG_FILE lets e2e capture out-of-band tokens |
 | P1 | Local gates | DONE | format ✓ lint ✓ typecheck ✓ 123/123 unit ✓ coverage floor met (auth 94/77/93/94) ✓ build ✓ e2e 18/18 ✓ |
 | P1 | PR + CI + merge | MERGED | PR #7 merged into main (43023ce) |
-| P2 | Domain core (students/parents/classes/attendance, guard 7.3, serializer 7.4) | IN PROGRESS | PR #12 open and 100% green; student profiles, parent link/unlink, ownership guard completed |
+| P2 | Domain core (students/parents/classes/attendance, guard 7.3, serializer 7.4) | MERGED | PR #12 merged into main (08a153d). Profiles, invite links, ownership guard (404), serializer 7.4. Next: classes/schedules/enrollments/attendance. |
 | P3–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-06 — Session 11: PR #12 merged to main, Dependabot config validator fix
+- Owner merged PR #12 into `main` (commit `08a153d`).
+- GitHub Actions CI on `main` ran successfully: 13/13 jobs passed (deploy skipped as expected without cloud secrets).
+- Issue resolved on `main`: GitHub's native Dependabot validator flagged a configuration syntax error in `.github/dependabot.yml` on commit `08a153d`:
+  `The property '#/updates/0/groups/minor-and-patch/update-types/0' value 'version-update:semver-minor' did not match one of the following values: major, minor, patch`.
+  In Dependabot specs, `ignore.update-types` uses `version-update:semver-*`, but `groups.<group>.update-types` expects enum values `major`, `minor`, `patch` and requires `patterns` to be specified.
+- Fixed `.github/dependabot.yml`: added `patterns: ["*"]` and updated `update-types` to `minor` and `patch`.
+- Closed obsolete Dependabot PRs #8, #9, #10, #11 by deleting their remote branches.
+- Local `main` synced with `origin/main`; `phase/2-domain-core` branch cleaned up.
 
 ### 2026-09-06 — Session 10: CI/CD fully audited, commitlint logic fixed, PR #12 100% green
 - Diagnosed why GLM-5.3 struggled across multiple iterations and fixed the root causes:
