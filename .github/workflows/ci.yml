@@ -25,7 +25,60 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
 
+  secrets-scan:
+    name: secrets-scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan full git history for leaked secrets
+        run: |
+          docker run --rm -v "$PWD:/repo" --workdir /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 detect --source /repo --verbose --redact
+
+  sast:
+    name: sast (semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep security rules (OWASP top ten, TypeScript, secrets)
+        id: sast
+        run: |
+          set +e
+          # Excluded rules are documented false positives:
+          # - detected-bcrypt-hash: the timing-equalization dummy hash in
+          #   src/auth/auth.service.ts hashes a throwaway string and unlocks nothing.
+          # - gcm-no-tag-length: the GCM auth tag length IS pinned to 16 in
+          #   src/auth/mfa/seal.service.ts; @types/node does not model the length arg.
+          docker run --rm -v "$PWD:/src" --workdir /src \
+            semgrep/semgrep:latest semgrep scan \
+            --config p/owasp-top-ten --config p/typescript --config p/secrets \
+            --metrics=off --json --output /src/semgrep-report.json \
+            --exclude-rule generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash \
+            --exclude-rule javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-report
+          path: semgrep-report.json
+          if-no-files-found: ignore
+      - name: Fail on Semgrep findings (emitted as annotations)
+        run: |
+          node -e "
+            const report = require('./semgrep-report.json');
+            const results = report.results ?? [];
+            console.log('Semgrep findings:', results.length);
+            for (const r of results.slice(0, 30)) {
+              const line = r.start?.line ?? 1;
+              console.log('::error file=' + r.path + ',line=' + line + ',title=' + r.check_id + '::' + String(r.extra?.message ?? '').split('\n')[0].slice(0, 120));
+            }
+            process.exit(results.length === 0 ? 0 : 1);
+          "
+
   build-test:
+    name: build-test (typecheck, unit, coverage gate)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +89,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # jest --coverage fails the job when the 75% floor (auth/billing/classes, plan 12)
+      # is not met: the coverage gate.
       - run: npm test -- --coverage
 
   migration-dry-run:
@@ -96,6 +151,7 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: postgresql://vovinam:vovinam@localhost:5432/vovinam_test?schema=public
       JWT_SECRET: ci-jwt-secret-0123456789abcdef0123456789abcdef
+      APP_ENCRYPTION_KEY: abababababababababababababababababababababababababababababababab
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -104,9 +160,29 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma migrate deploy
-      - run: npm run test:e2e
+      - name: Run e2e suite (full output emitted as annotations on failure)
+        run: |
+          set +e
+          npm run test:e2e > e2e-output.txt 2>&1
+          EXIT=$?
+          if [ "$EXIT" != "0" ]; then
+            # The output is small (~1KB); mirror every line into annotations so the
+            # failure is readable on the PR without Actions log access.
+            grep -v '^$' e2e-output.txt | head -45 | while IFS= read -r line; do
+              safe=$(printf '%s' "$line" | cut -c1-160)
+              echo "::error title=e2e::$safe"
+            done
+          fi
+          exit $EXIT
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-output
+          path: e2e-output.txt
+          if-no-files-found: ignore
 
   audit:
+    name: audit (npm audit high)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,6 +193,61 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=high
 
+  container-scan:
+    name: container-scan (trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t vovinam-api:ci .
+      - name: Scan image for HIGH/CRITICAL vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/report" -w /report aquasec/trivy:0.74.0 image \
+            --ignore-unfixed --scanners vuln --severity HIGH,CRITICAL \
+            --skip-files "/usr/local/lib/node_modules/npm/**" \
+            --format json --output /report/trivy-report.json vovinam-api:ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          if-no-files-found: ignore
+      - name: Fail on Trivy findings (emitted as annotations)
+        run: |
+          node -e "
+            const report = require('./trivy-report.json');
+            const vulns = (report.Results ?? []).flatMap((r) => r.Vulnerabilities ?? []);
+            console.log('Trivy HIGH/CRITICAL (unfixed excluded):', vulns.length);
+            for (const v of vulns.slice(0, 30)) {
+              console.log('::error title=' + v.VulnerabilityID + ' ' + v.PkgName + '::fixed=' + (v.FixedVersion ?? 'none') + ' - ' + String(v.Title ?? '').slice(0, 100));
+            }
+            process.exit(vulns.length === 0 ? 0 : 1);
+          "
+
+  tech-debt-gate:
+    name: tech-debt-gate (extraneous deps, outdated report)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Fail on extraneous packages (leftover install junk)
+        run: |
+          REMOVED=$(npm prune --dry-run --json | grep -o '"removed": [0-9]*' | grep -o '[0-9]*')
+          echo "npm prune would remove: $REMOVED package(s)"
+          if [ "$REMOVED" != "0" ]; then
+            echo "::error::Extraneous packages detected — run 'npm prune' locally and re-lock dependencies"
+            exit 1
+          fi
+          echo "No extraneous packages"
+      - name: Report outdated dependencies (non-blocking)
+        run: |
+          npm outdated || echo "::notice::Outdated dependencies listed above; major versions are deliberately migrated, minor/patch arrive weekly via Dependabot"
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -125,7 +256,17 @@ jobs:
         run: docker build -t vovinam-api:ci .
 
   deploy:
-    needs: [lint, build-test, migration-dry-run, integration, audit, docker]
+    needs:
+      - lint
+      - secrets-scan
+      - sast
+      - build-test
+      - migration-dry-run
+      - integration
+      - audit
+      - container-scan
+      - tech-debt-gate
+      - docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
