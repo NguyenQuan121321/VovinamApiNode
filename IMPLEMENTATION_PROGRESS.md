@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **PR #12 (`phase/2-domain-core`) MERGED into `main` (merge commit `08a153d`). CI/CD on `main` 100% green (all 14 workflow jobs passed). Dependabot syntax fix committed to `main` to resolve GitHub's native Dependabot validator.**
+Current status: **P2 increment 2 implemented on branch `phase/2-domain-core` (classes/schedules/enrollments/attendance + audit events): all local gates green, ready for owner to open the PR and let CI run. PR #12 (P2 increment 1) already MERGED into `main` (merge commit `08a153d`).**
 
 ## Phase task table
 
@@ -19,10 +19,23 @@ Current status: **PR #12 (`phase/2-domain-core`) MERGED into `main` (merge commi
 | P1 | E2E: lifecycle + S-05/S-07/S-08/S-09/S-12 in test/security/ | DONE (ce258f5) | 18/18 e2e green vs real Postgres; MAIL_LOG_FILE lets e2e capture out-of-band tokens |
 | P1 | Local gates | DONE | format ✓ lint ✓ typecheck ✓ 123/123 unit ✓ coverage floor met (auth 94/77/93/94) ✓ build ✓ e2e 18/18 ✓ |
 | P1 | PR + CI + merge | MERGED | PR #7 merged into main (43023ce) |
-| P2 | Domain core (students/parents/classes/attendance, guard 7.3, serializer 7.4) | MERGED | PR #12 merged into main (08a153d). Profiles, invite links, ownership guard (404), serializer 7.4. Next: classes/schedules/enrollments/attendance. |
+| P2 | Domain core (students/parents/classes/attendance, guard 7.3, serializer 7.4) | IN PROGRESS | Increment 1 MERGED: PR #12 (08a153d) — profiles, invite links, ownership guard (404), serializer 7.4. Increment 2 DONE on branch `phase/2-domain-core`: classes/schedules/enrollments/attendance (see Session 12). |
+| P2 | Classes/schedules/enrollments/attendance (increment 2) | DONE on phase/2-domain-core | Migration `20260905211728` adds 5 tables (17 total; CI dry-run assertion updated 12→17 and replay-verified on a scratch DB). Classes CRUD + schedules (Postgres TIME as HH:mm, UTC round trip verified); enrollments (soft leave via left_at, capacity enforced, open/same-day duplicates rejected per plan 6 UQ semantics); attendance sessions (one per class/date, P2002→409) + bulk upsert records (all-or-nothing, non-enrolled rejected); GET /students/:id/attendance + GET /attendance/summary?month=. INSTRUCTOR clause of guard 7.3 now ACTIVE (own-class enrollments only); GET /students role-scoped (ADMIN all, INSTRUCTOR own classes, no contact fields per 7.4). Audit events: student_profile_*, parent_link_*, class_*, enrollment_*, attendance_*. Evidence: 173/173 unit, coverage floors met (classes 97.5/89.5, attendance 94.6/90.5), 29/29 e2e incl. one full attendance-session lifecycle, lint/typecheck/format/build green, openapi.json regenerated (44 paths), spectral 0 errors. |
 | P3–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-06 — Session 12: P2 increment 2 (classes/enrollments/attendance) implemented, gates green
+- Session start: read IMPLEMENTATION_PROGRESS.md + git log + docs/PLAN.md; static consistency check of the current tree BEFORE coding (format/lint/typecheck/142 unit/build — all green, tree consistent). Branch `phase/2-domain-core` recreated from up-to-date `main`.
+- Schema: `prisma migrate dev` created `20260905211728_add_classes_enrollments_attendance` (classes, class_schedules, enrollments, attendance_sessions, attendance_records). FK behavior per plan 6: schedules CASCADE; enrollments/sessions/records RESTRICT. Prisma-native UQs: (studentId, classId, enrolledAt), (classId, sessionDate), (attendanceSessionId, studentId). The plan's `enrolled_at::date` uniqueness is enforced in the service inside the create transaction (Prisma cannot model functional unique indexes without drift risk on future migrations).
+- Key empirical check: Postgres TIME columns round-trip through Prisma 6 as epoch-date Dates in UTC (`1970-01-01T18:30Z`); verified against WSL PostgreSQL 18 with a throwaway probe before writing the serializer. `src/classes/time.ts` converts HH:mm ↔ TIME using UTC accessors only.
+- Modules: `src/classes` (ClassesController any-authenticated reads / ADMIN writes; EnrollmentsController ADMIN; ClassesService.assertManageable shared gate), `src/attendance` (sessions + bulk records for ADMIN/own-INSTRUCTOR; history + summary via StudentOwnershipService). DELETE /classes/:id/schedules/:scheduleId added beyond plan 8 for schedule lifecycle (justified; noted here).
+- Guard 7.3 INSTRUCTOR clause activated: enrollment.findFirst({ studentId, leftAt: null, class.instructorId = caller }). GET /students now @Roles(ADMIN, INSTRUCTOR) — instructors get only own-class students serialized WITHOUT contact fields; foreign classId filter yields an empty list (no probing).
+- Coverage-gate lesson (cost one debugging round): jest 29 computes the `coverageThreshold.global` group ONLY over files NOT matched by a path-specific group (empirically proven: failing global 71.4% == rest+attendance 472/661). Adding `src/attendance/` without specs silently dropped the global bucket below the floor while the printed "All files" row showed 84.69%. Fix: thin controller specs for classes/enrollments/attendance + attendance.module.spec (mirrors auth.controller.spec.ts). Now: global bucket 87.3% stmts, classes group 97.5/89.5, attendance 94.6/90.5. When adding a new package in the future, either add a threshold group or ship specs with it.
+- E2E: new `test/e2e/classes-attendance.e2e-spec.ts` — full attendance-session lifecycle (create class → schedule → enroll → session → bulk upsert → overwrite → read back → history + monthly summary), S-04 (foreign instructor uniform 404 on class/records/attendance), S-01 (unlinked parent 404), capacity/duplicate/date-uniqueness conflicts, HH:mm round trip through the API. Suite: 29/29 vs real Postgres.
+- CI: migration-dry-run table assertion updated to 17 tables incl. the 5 new ones; replay verified locally on a scratch database (migrate deploy on empty DB → 17/17 → dropped).
+- Local gate evidence: format ✓ lint ✓ typecheck ✓ 173/173 unit ✓ coverage floors met ✓ build ✓ e2e 29/29 ✓ openapi.json regenerated (44 paths, +10) ✓ spectral 0 errors ✓.
+- ACTION REQUIRED from owner: open PR `phase/2-domain-core` → `main` (https://github.com/NguyenQuan121321/VovinamApiNode/compare/main...phase/2-domain-core), let the 14-job CI run, squash-merge when green, delete branch, pull main. P2 then complete; P3 (belts/exams) starts next on `phase/3-belts-exams`.
 
 ### 2026-09-06 — Session 11: PR #12 merged to main, Dependabot config validator fix
 - Owner merged PR #12 into `main` (commit `08a153d`).

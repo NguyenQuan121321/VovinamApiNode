@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, StudentProfile } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../auth/audit/audit.service';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import { StudentOwnershipService } from './student-ownership.service';
 import { serializeStudent, type CallerRole } from './serialize-student';
@@ -23,10 +24,17 @@ export class StudentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ownership: StudentOwnershipService,
+    private readonly audit: AuditService,
   ) {}
 
-  /** ADMIN: paginated directory of non-deleted profiles. */
-  async list(query: ListStudentsQueryDto): Promise<{
+  /**
+   * ADMIN: the whole non-deleted directory. INSTRUCTOR: only students currently
+   * enrolled in classes they teach (plan 8), serialized without contact fields.
+   */
+  async list(
+    caller: AuthenticatedUser,
+    query: ListStudentsQueryDto,
+  ): Promise<{
     items: Array<Record<string, unknown>>;
     total: number;
     page: number;
@@ -39,6 +47,23 @@ export class StudentsService {
     if (query.search !== undefined) {
       where.fullName = { contains: query.search };
     }
+    if (query.classId !== undefined) {
+      where.enrollments = { some: { classId: query.classId, leftAt: null } };
+    }
+    if (caller.role === 'INSTRUCTOR') {
+      // Class filter intersects with own classes: foreign classId yields an empty
+      // list rather than an error, so class ids cannot be probed either.
+      where.enrollments = {
+        some: {
+          leftAt: null,
+          class: {
+            instructorId: caller.id,
+            ...(query.classId === undefined ? {} : { id: query.classId }),
+          },
+        },
+      };
+    }
+    const serializerRole = caller.role === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'ADMIN';
     const [profiles, total] = await this.prisma.$transaction([
       this.prisma.studentProfile.findMany({
         where,
@@ -49,7 +74,7 @@ export class StudentsService {
       this.prisma.studentProfile.count({ where }),
     ]);
     return {
-      items: profiles.map((p) => serializeStudent(p, 'ADMIN')),
+      items: profiles.map((p) => serializeStudent(p, serializerRole)),
       total,
       page: query.page,
       limit: query.limit,
@@ -93,6 +118,11 @@ export class StudentsService {
         status: 'ACTIVE',
         inviteCode: await this.uniqueInviteCode(),
       },
+    });
+    this.audit.record({
+      event: 'student_profile_created',
+      success: true,
+      detail: `student_profile:${profile.id}`,
     });
     return {
       ...serializeStudent(profile, 'ADMIN'),
@@ -152,6 +182,11 @@ export class StudentsService {
         status: dto.status,
       },
     });
+    this.audit.record({
+      event: 'student_profile_updated',
+      success: true,
+      detail: `student_profile:${studentId}`,
+    });
     return serializeStudent(updated, 'ADMIN');
   }
 
@@ -169,6 +204,11 @@ export class StudentsService {
       where: { studentProfile: { id: studentId }, isActive: true },
       data: { isActive: false },
     });
+    this.audit.record({
+      event: 'student_profile_deleted',
+      success: true,
+      detail: `student_profile:${studentId}`,
+    });
     return { deleted: true };
   }
 
@@ -183,6 +223,11 @@ export class StudentsService {
     const updated = await this.prisma.studentProfile.update({
       where: { id: studentId },
       data: { inviteCode: await this.uniqueInviteCode() },
+    });
+    this.audit.record({
+      event: 'student_invite_regenerated',
+      success: true,
+      detail: `student_profile:${studentId}`,
     });
     return { inviteCode: updated.inviteCode };
   }

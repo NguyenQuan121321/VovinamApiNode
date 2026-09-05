@@ -15,6 +15,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { ClassesModule } from './classes/classes.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { StudentsModule } from './students/students.module';
 import { ParentsModule } from './parents/parents.module';
 
@@ -29,6 +30,7 @@ import { ParentsModule } from './parents/parents.module';
     AuthModule,
     BillingModule,
     ClassesModule,
+    AttendanceModule,
     StudentsModule,
     ParentsModule,
   ],

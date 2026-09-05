@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Max,
   MaxLength,
@@ -131,6 +132,11 @@ export class ListStudentsQueryDto {
   @IsString()
   @MinLength(2)
   search?: string;
+
+  /** Limit to students currently enrolled in one class (role-scoped in the service). */
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
 }
 
 export class LinkChildDto {
