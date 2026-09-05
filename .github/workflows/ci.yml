@@ -25,7 +25,32 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
 
+  secrets-scan:
+    name: secrets-scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan full git history for leaked secrets
+        run: |
+          docker run --rm -v "$PWD:/repo" --workdir /repo \
+            ghcr.io/gitleaks/gitleaks:v8.24.3 detect --source /repo --verbose --redact
+
+  sast:
+    name: sast (semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep security rules (OWASP top ten, TypeScript, secrets)
+        run: |
+          docker run --rm -v "$PWD:/src" --workdir /src \
+            returntocorp/semgrep:latest semgrep scan \
+            --config p/owasp-top-ten --config p/typescript --config p/secrets \
+            --error --metrics=off
+
   build-test:
+    name: build-test (typecheck, unit, coverage gate)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +61,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # jest --coverage fails the job when the 75% floor (auth/billing/classes, plan 12)
+      # is not met: the coverage gate.
       - run: npm test -- --coverage
 
   migration-dry-run:
@@ -107,6 +134,7 @@ jobs:
       - run: npm run test:e2e
 
   audit:
+    name: audit (npm audit high)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,6 +145,42 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=high
 
+  container-scan:
+    name: container-scan (trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t vovinam-api:ci .
+      - name: Scan image for HIGH/CRITICAL vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --exit-code 1 --ignore-unfixed \
+            --severity HIGH,CRITICAL vovinam-api:ci
+
+  tech-debt-gate:
+    name: tech-debt-gate (unused deps, outdated report)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Fail on extraneous packages (leftover install junk)
+        run: |
+          PRUNE_OUTPUT=$(npm prune --dry-run)
+          if [ "$PRUNE_OUTPUT" != "up to date" ] && [ -n "$PRUNE_OUTPUT" ]; then
+            echo "$PRUNE_OUTPUT"
+            echo "::error::Extraneous packages detected — remove them and re-lock dependencies"
+            exit 1
+          fi
+          echo "No extraneous packages"
+      - name: Report outdated dependencies (non-blocking)
+        run: |
+          npm outdated || echo "::notice::Outdated dependencies listed above; major versions are deliberately migrated, minor/patch arrive weekly via Dependabot"
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -125,7 +189,17 @@ jobs:
         run: docker build -t vovinam-api:ci .
 
   deploy:
-    needs: [lint, build-test, migration-dry-run, integration, audit, docker]
+    needs:
+      - lint
+      - secrets-scan
+      - sast
+      - build-test
+      - migration-dry-run
+      - integration
+      - audit
+      - container-scan
+      - tech-debt-gate
+      - docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production

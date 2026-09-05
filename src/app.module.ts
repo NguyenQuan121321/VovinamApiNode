@@ -7,7 +7,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter';
 import { RequestIdMiddleware } from './common/request-id.middleware';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 import { ResponseInterceptor } from './common/response.interceptor';
-import { InMemorySharedStore, SHARED_STORE } from './common/shared-store';
+import { SharedStoreModule } from './common/shared-store.module';
 import { HealthModule } from './health/health.module';
 import { MetricsMiddleware } from './health/metrics.middleware';
 import { LoggingModule } from './logging/logging.module';
@@ -21,6 +21,7 @@ import { ClassesModule } from './classes/classes.module';
     ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
     AppConfigModule,
     LoggingModule,
+    SharedStoreModule,
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -28,7 +29,6 @@ import { ClassesModule } from './classes/classes.module';
     ClassesModule,
   ],
   providers: [
-    { provide: SHARED_STORE, useClass: InMemorySharedStore },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
