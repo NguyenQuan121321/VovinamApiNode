@@ -1045,6 +1045,231 @@
         ]
       }
     },
+    "/api/v1/belt-ranks": {
+      "get": {
+        "operationId": "BeltsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Belts"
+        ]
+      },
+      "post": {
+        "operationId": "BeltsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBeltRankDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Belts"
+        ]
+      }
+    },
+    "/api/v1/belt-ranks/{id}": {
+      "patch": {
+        "operationId": "BeltsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBeltRankDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Belts"
+        ]
+      }
+    },
+    "/api/v1/belt-exams": {
+      "get": {
+        "operationId": "ExamsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      },
+      "post": {
+        "operationId": "ExamsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBeltExamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      }
+    },
+    "/api/v1/belt-exams/{id}": {
+      "get": {
+        "operationId": "ExamsController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      },
+      "patch": {
+        "operationId": "ExamsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBeltExamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      }
+    },
+    "/api/v1/belt-exams/{id}/register": {
+      "post": {
+        "operationId": "ExamsController_register",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterExamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      }
+    },
+    "/api/v1/exam-registrations/{id}/result": {
+      "post": {
+        "operationId": "ExamsController_recordResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExamResultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      }
+    },
     "/api/v1/parents/link": {
       "post": {
         "operationId": "ParentsController_linkChild",
@@ -1205,6 +1430,30 @@
         "properties": {}
       },
       "UpdateStudentDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateBeltRankDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateBeltRankDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateBeltExamDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateBeltExamDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RegisterExamDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ExamResultDto": {
         "type": "object",
         "properties": {}
       },
