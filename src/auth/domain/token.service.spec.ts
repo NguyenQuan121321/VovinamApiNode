@@ -51,13 +51,17 @@ describe('TokenService', () => {
 
   it('rejects tokens signed under an unknown key id', () => {
     const service = makeService(false);
-    const foreign = jwt.sign({ type: 'access', jti: 'j', sid: 's', pwdver: 1, role: 'STUDENT' }, SECRET, {
-      algorithm: 'HS256',
-      keyid: 'rogue',
-      subject: user.id,
-      issuer: 'vovinam-api',
-      expiresIn: 60,
-    });
+    const foreign = jwt.sign(
+      { type: 'access', jti: 'j', sid: 's', pwdver: 1, role: 'STUDENT' },
+      SECRET,
+      {
+        algorithm: 'HS256',
+        keyid: 'rogue',
+        subject: user.id,
+        issuer: 'vovinam-api',
+        expiresIn: 60,
+      },
+    );
     expect(() => service.verify(foreign, 'access')).toThrow();
   });
 

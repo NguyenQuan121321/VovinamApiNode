@@ -1,4 +1,10 @@
-import { Inject, Injectable, UnauthorizedException, type CanActivate, type ExecutionContext } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  UnauthorizedException,
+  type CanActivate,
+  type ExecutionContext,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { SHARED_STORE, type SharedStore } from '../../common/shared-store';
 import { PrismaService } from '../../prisma/prisma.service';

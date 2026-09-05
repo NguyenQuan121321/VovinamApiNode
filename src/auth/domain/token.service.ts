@@ -20,6 +20,15 @@ export interface MfaPendingClaims extends JwtPayload {
   jti: string;
 }
 
+export type ActionPurpose = 'VERIFY_EMAIL' | 'RESET_PASSWORD' | 'CHANGE_EMAIL';
+
+export interface ActionTokenClaims extends JwtPayload {
+  sub: string;
+  type: 'action';
+  purpose: ActionPurpose;
+  jti: string;
+}
+
 const CURRENT_KID = 'current';
 const PREVIOUS_KID = 'previous';
 const HS256 = 'HS256';
@@ -44,9 +53,18 @@ export class TokenService {
     return this.accessTtlSeconds * 1000;
   }
 
-  signAccessToken(user: { id: string; role: UserRole; pwdVersion: number }, sessionId: string): string {
+  signAccessToken(
+    user: { id: string; role: UserRole; pwdVersion: number },
+    sessionId: string,
+  ): string {
     return jwt.sign(
-      { role: user.role, type: 'access', jti: randomUUID(), sid: sessionId, pwdver: user.pwdVersion },
+      {
+        role: user.role,
+        type: 'access',
+        jti: randomUUID(),
+        sid: sessionId,
+        pwdver: user.pwdVersion,
+      },
       this.env.jwtSecret,
       {
         algorithm: HS256,
@@ -68,7 +86,18 @@ export class TokenService {
     });
   }
 
-  verify(token: string, expectedType: 'access' | 'mfa_pending'): JwtPayload {
+  /** Single-use flow tokens (verify-email 24h, reset-password 15m, change-email 24h). */
+  signActionToken(userId: string, purpose: ActionPurpose, ttlSeconds: number): string {
+    return jwt.sign({ type: 'action', purpose, jti: randomUUID() }, this.env.jwtSecret, {
+      algorithm: HS256,
+      keyid: CURRENT_KID,
+      subject: userId,
+      issuer: this.env.jwtIssuer,
+      expiresIn: ttlSeconds,
+    });
+  }
+
+  verify(token: string, expectedType: 'access' | 'mfa_pending' | 'action'): JwtPayload {
     const decoded = jwt.decode(token, { complete: true });
     if (decoded === null) {
       throw new jwt.JsonWebTokenError('invalid token');

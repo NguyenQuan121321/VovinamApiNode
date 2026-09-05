@@ -3,9 +3,9 @@ import { AuditService, type AuditEntry } from './audit.service';
 type CreateManyArgs = { data: Array<Record<string, unknown>> };
 
 describe('AuditService', () => {
-  const createMany = jest.fn(
-    async (_args?: CreateManyArgs): Promise<{ count: number }> => ({ count: 1 }),
-  );
+  const createMany = jest.fn(async (_args?: CreateManyArgs): Promise<{ count: number }> => ({
+    count: 1,
+  }));
   const prisma = { auditLog: { createMany } };
   const service = new AuditService(prisma as never);
 
