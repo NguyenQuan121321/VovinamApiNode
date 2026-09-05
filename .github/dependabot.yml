@@ -15,8 +15,8 @@ updates:
       # tech-debt report and a deliberate migration instead of an auto PR.
       minor-and-patch:
         update-types:
-          - minor
-          - patch
+          - version-update:semver-minor
+          - version-update:semver-patch
     ignore:
       - dependency-name: "*"
         update-types:

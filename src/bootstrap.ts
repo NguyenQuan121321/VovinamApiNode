@@ -8,6 +8,16 @@ import { AppModule } from './app.module';
 import { EnvService } from './config/env.service';
 import { PinoLoggerService } from './logging/pino-logger.service';
 
+/** Single source of the OpenAPI contract (used by bootstrap and scripts/generate-openapi.ts). */
+export function buildOpenApiDocumentConfig() {
+  return new DocumentBuilder()
+    .setTitle('VovinamApiNode')
+    .setDescription('Vovinam club management API')
+    .setVersion('0.1.0')
+    .addBearerAuth()
+    .build();
+}
+
 // Swagger UI inlines scripts/styles and may load assets from a CDN; production keeps
 // SWAGGER_ENABLED=false so this relaxed CSP only ever applies in dev/staging.
 function swaggerCsp() {
@@ -56,15 +66,14 @@ export async function createApp() {
   app.enableShutdownHooks();
 
   if (env.swaggerEnabled) {
-    const config = new DocumentBuilder()
-      .setTitle('VovinamApiNode')
-      .setDescription('Vovinam club management API')
-      .setVersion('0.1.0')
-      .addBearerAuth()
-      .build();
-    SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config), {
-      jsonDocumentUrl: 'docs-json',
-    });
+    SwaggerModule.setup(
+      'docs',
+      app,
+      SwaggerModule.createDocument(app, buildOpenApiDocumentConfig()),
+      {
+        jsonDocumentUrl: 'docs-json',
+      },
+    );
   }
 
   return app;

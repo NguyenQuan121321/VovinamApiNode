@@ -69,11 +69,18 @@ export class TotpService {
     }
   }
 
-  verifyCode(userId: string, secret: string, code: string): boolean {
+  verifyCode(userId: string, secret: string, code: string, nowMs = Date.now()): boolean {
     this.assertNotLocked(userId);
     const normalized = code.trim();
     const replayed = this.store.get(replayKey(userId, normalized)) !== undefined;
-    const valid = !replayed && this.totp.verify({ token: normalized, secret });
+    // Per-call instance: epoch must match the caller's clock (tests pin it to make
+    // step-boundary races impossible); production uses the default wall clock.
+    const verifier = authenticator.create({
+      ...authenticator.options,
+      window: SKEW_WINDOW_STEPS,
+      epoch: nowMs,
+    });
+    const valid = !replayed && verifier.verify({ token: normalized, secret });
     if (valid) {
       this.store.delete(failKey(userId));
       this.store.set(replayKey(userId, normalized), true, REPLAY_GUARD_MS);

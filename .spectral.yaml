@@ -1,0 +1,15 @@
+# Spectral ruleset for the committed OpenAPI contract (openapi.json).
+# Structural issues fail the contract gate; purely stylistic info rules are off.
+extends:
+  - spectral:oas
+rules:
+  # Contract stability and consumer ergonomics
+  operation-operationId: error
+  no-eval-in-markdown: warn
+  # Style rules that carry no contract risk
+  info-contact: off
+  info-description: off
+  oas3-api-servers: off
+  operation-tag-defined: off
+  openapi-tags: off
+  openapi-tags-alphabetical: off

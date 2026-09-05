@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P2 students/parents core IMPLEMENTED on branch `phase/2-domain-core` (2fa1780) — all gates green locally; PR #7 (P1+CI/CD) still awaits owner merge.**
+Current status: **P2 students/parents + 10-job CI/CD extended with 4 more gates — on branch `phase/2-domain-core`, all green locally (142 unit / 24 e2e). PR #7 (P1) merged by owner; main CI had one flaky build-test (TOTP step-boundary — fixed with pinned-clock verification).**
 
 ## Phase task table
 
@@ -23,6 +23,18 @@ Current status: **P2 students/parents core IMPLEMENTED on branch `phase/2-domain
 | P3–P7 | — | NOT STARTED | See docs/PLAN.md section 13 |
 
 ## Handoff log
+
+### 2026-09-06 — Session 8: new CI/CD wave (contract, license, commitlint, smoke) + flake fix
+- Owner merged PR #7; main's build-test then failed ONCE: the TOTP skew unit test races the 30s step boundary (code generated 31s ago, verified against the wall clock). Fixed: TotpService.verifyCode accepts an optional pinned nowMs (production default Date.now()); the test pins both sides. Dependabot config validation error fixed: group update-types must be `version-update:semver-minor/patch`.
+- Four new gates implemented and VERIFIED LOCALLY before pushing:
+  1. `contract-gate`: `npm run openapi:generate` (scripts/generate-openapi.ts boots the app WITHOUT a DB connection — env only passes validation) writes the COMMITTED openapi.json; the job fails if the committed file is stale, then `spectral lint --fail-severity=error` (.spectral.yaml: operationId required, style noise off). openapi.json has 34 paths.
+  2. `license-check`: scripts/license-check.js — production deps against an allowlist (GPL/AGPL/unknown fail); the root package is UNLICENSED (private) and exempt. 193 packages clean.
+  3. `commitlint` (PR only): PR title AND all PR commits must be Conventional Commits (scope-enum locked to project modules). Follow-up for the user: PR titles like `feat(auth): ...` keep squash-merges compliant on main.
+  4. Post-deploy smoke test inside `deploy`: when the SMOKE_TEST_URL secret exists, poll /healthz up to 5 min then require /readyz 200 (DB reachable); stub echo until then. Requires adding SMOKE_TEST_URL (+ RENDER_DEPLOY_HOOK) repo secrets at go-live.
+- Optimizations per user request: `permissions: contents: read` at workflow top (least privilege, was already present); job layering — light jobs (lint/secrets/sast/audit/license/commitlint/tech-debt) run fully parallel first, `docker` needs the heavy wave (build-test/integration/migration), container-scan needs docker, deploy needs everything; buildx with type=gha layer cache shared by docker and container-scan (scan job rebuilds from cache instead of from scratch).
+- oasdiff (breaking-change diff vs base branch) deferred: the npm wrapper does not install on Windows; the committed openapi.json makes adding it trivial later.
+- migration-dry-run now asserts 12 tables (added student_profiles, parent_student_links).
+- Evidence: 142/142 unit, 24/24 e2e, spectral 0 errors, license OK, commitlint verified both ways, YAML valid, typecheck/build green, generator idempotent.
 
 ### 2026-09-06 — Session 7: branch audit + P2 roles/students implemented
 - Branch audit per user request: main 7/7 green; PR #7 10/10 green (the build-test failure on e74d819 was a one-off flake that did not recur — a unit annotation reporter is now wired so any repeat names itself). Closed all 5 Dependabot PRs by deleting their head branches via git (they were unmergeable major bumps against the old pipeline; Dependabot can regenerate, and the new ignore config prevents the major ones).

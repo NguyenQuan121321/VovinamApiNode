@@ -31,17 +31,17 @@ describe('TotpService', () => {
     expect(service.verifyCode('u-1', secret, '000000')).toBe(false);
   });
 
-  it('accepts ±1 step skew but not more', () => {
+  it('accepts ±1 step skew but not more (pinned clock — no boundary races)', () => {
     const secret = authenticator.generateSecret();
     const nowMs = Date.now();
     const prevCode = authenticator
       .create({ ...authenticator.options, window: 0, epoch: nowMs - 31_000 })
       .generate(secret);
-    expect(service.verifyCode('u-1', secret, prevCode)).toBe(true);
+    expect(service.verifyCode('u-1', secret, prevCode, nowMs)).toBe(true);
     const farCode = authenticator
       .create({ ...authenticator.options, window: 0, epoch: nowMs - 95_000 })
       .generate(secret);
-    expect(service.verifyCode('u-2', secret, farCode)).toBe(false);
+    expect(service.verifyCode('u-2', secret, farCode, nowMs)).toBe(false);
   });
 
   it('blocks a replayed code within the 120s guard', () => {
