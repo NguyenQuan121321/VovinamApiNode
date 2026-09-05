@@ -6,8 +6,6 @@ describe('Swagger (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.SWAGGER_ENABLED = 'true';
     if (process.env.DATABASE_URL === undefined || process.env.DATABASE_URL === '') {
       throw new Error('DATABASE_URL must be set for e2e tests');
     }

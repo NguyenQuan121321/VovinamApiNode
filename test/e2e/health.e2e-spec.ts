@@ -8,11 +8,9 @@ describe('Health and ops endpoints (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
     if (process.env.DATABASE_URL === undefined || process.env.DATABASE_URL === '') {
       throw new Error('DATABASE_URL must be set for e2e tests');
     }
-    process.env.METRICS_TOKEN = METRICS_TOKEN;
     app = await createApp();
     await app.init();
   });
