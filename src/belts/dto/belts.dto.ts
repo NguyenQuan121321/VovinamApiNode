@@ -1,14 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsEnum,
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 
 export class CreateBeltRankDto {
   /** Club code, e.g. LAM_1, VANG_2, DO_6 (plan section 6). */
