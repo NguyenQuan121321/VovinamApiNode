@@ -1,6 +1,6 @@
 {
   "rootDir": "..",
-  "roots": ["<rootDir>/test/e2e"],
+  "roots": ["<rootDir>/test/e2e", "<rootDir>/test/security"],
   "testRegex": ".e2e-spec.ts$",
   "moduleFileExtensions": ["js", "json", "ts"],
   "transform": {

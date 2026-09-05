@@ -8,6 +8,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { LoggingMailSender } from './mail/logging-mail.sender';
 import { MAIL_PORT } from './mail/mail.port';
+import { SealService } from './mfa/seal.service';
+import { TotpService } from './mfa/totp.service';
 import { UsedTokenPurgeJob } from './used-token.purge';
 
 @Module({
@@ -17,6 +19,8 @@ import { UsedTokenPurgeJob } from './used-token.purge';
     TokenService,
     RefreshTokenService,
     AuditService,
+    SealService,
+    TotpService,
     UsedTokenPurgeJob,
     JwtAuthGuard,
     RolesGuard,

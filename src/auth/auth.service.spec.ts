@@ -1,12 +1,15 @@
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
+import { authenticator } from 'otplib';
 import { InMemorySharedStore } from '../common/shared-store';
 import { EnvService } from '../config/env.service';
 import type { Env } from '../config/env.validation';
 import { AuditService } from './audit/audit.service';
 import { AuthService, INVALID_CREDENTIALS_MESSAGE, INVALID_TOKEN_MESSAGE } from './auth.service';
 import { RefreshTokenService } from './domain/refresh-token.service';
+import { SealService } from './mfa/seal.service';
+import { TotpService } from './mfa/totp.service';
 import { TokenService } from './domain/token.service';
 import type { MailMessage, MailPort } from './mail/mail.port';
 
@@ -29,7 +32,18 @@ function makePrismaMock() {
       updateMany: jest.fn(),
     },
     refreshToken: { findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
-    totpCredential: { findUnique: jest.fn(async () => null) },
+    totpCredential: {
+      findUnique: jest.fn(async () => null),
+      create: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    recoveryCode: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      count: jest.fn(async () => 10),
+      update: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     auditLog: {
       count: jest.fn(async () => 1),
       createMany: jest.fn(async () => ({ count: 1 })),
@@ -58,10 +72,12 @@ function makeService(prisma: PrismaMock) {
       REFRESH_TOKEN_TTL: '30d',
       MAX_LOGIN_ATTEMPTS: 5,
       LOGIN_LOCKOUT_DURATION: '15m',
+      APP_ENCRYPTION_KEY: 'ab'.repeat(32),
     }) as ConfigService<Env, true>,
   );
   const tokens = new TokenService(env);
   const audit = new AuditService(prisma as never);
+  const store = new InMemorySharedStore();
   const sentMail: Array<MailMessage> = [];
   const mail: MailPort = {
     send: jest.fn(async (message: MailMessage) => {
@@ -75,11 +91,13 @@ function makeService(prisma: PrismaMock) {
     tokens,
     new RefreshTokenService(),
     audit,
+    new SealService(env),
+    new TotpService(store, logger as never),
     mail,
-    new InMemorySharedStore(),
+    store,
     logger as never,
   );
-  return { service, tokens, sentMail, prisma };
+  return { service, tokens, sentMail, prisma, store };
 }
 
 const verifiedUser = (overrides: Record<string, unknown> = {}) => ({
@@ -468,6 +486,7 @@ function makeEnv(): EnvService {
       JWT_ISSUER: 'vovinam-api',
       ACCESS_TOKEN_TTL: '15m',
       REFRESH_TOKEN_TTL: '30d',
+      APP_ENCRYPTION_KEY: 'ab'.repeat(32),
     }) as ConfigService<Env, true>,
   );
 }
@@ -476,5 +495,201 @@ describe('AuthService — unauthorized exception contract', () => {
   it('exports uniform messages', () => {
     expect(INVALID_CREDENTIALS_MESSAGE).toBe('Invalid email or password');
     expect(new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE).getStatus()).toBe(401);
+  });
+});
+
+describe('AuthService — MFA and account lifecycle', () => {
+  let prisma: PrismaMock;
+  let service: AuthService;
+  let sentMail: Array<MailMessage>;
+  let store: InMemorySharedStore;
+  const sealedSecret = 'JBSWY3DPEHPK3PXP';
+
+  beforeEach(() => {
+    prisma = makePrismaMock();
+    ({ service, sentMail, store } = makeService(prisma));
+    prisma.user.findUnique.mockResolvedValue(verifiedUser());
+    prisma.user.findUniqueOrThrow.mockResolvedValue(verifiedUser());
+    prisma.session.create.mockResolvedValue({ id: 's-1' });
+    jest.spyOn(bcrypt, 'compare').mockImplementation(async (password: string) => {
+      return password === 'Correct1';
+    });
+  });
+
+  it('totpEnable refuses a second enrollment and stashes a pending secret', async () => {
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue({ userId: 'u-1' });
+    await expect(service.totpEnable('u-1')).rejects.toBeInstanceOf(ConflictException);
+
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue(null);
+    const enrollment = await service.totpEnable('u-1');
+    expect(enrollment.otpauthUrl).toContain('otpauth://totp/');
+    expect(store.get('mfa:pending:u-1')).toBeDefined();
+  });
+
+  it('totpVerify consumes the pending secret and returns ten single-use codes once', async () => {
+    await service.totpEnable('u-1');
+    const secret = String(store.get('mfa:pending:u-1'));
+    const code = authenticator.generate(secret);
+    const result = await service.totpVerify('u-1', code);
+    expect(result.recoveryCodes).toHaveLength(10);
+    expect(prisma.totpCredential.create).toHaveBeenCalled();
+    // Pending stash is consumed: a second verify has nothing to confirm.
+    await expect(service.totpVerify('u-1', code)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('totpValidate requires enrollment and a correct sealed-secret code', async () => {
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(service.totpValidate('u-1', '000000')).rejects.toBeInstanceOf(BadRequestException);
+
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue({
+      userId: 'u-1',
+      secretEncrypted: new SealService(makeEnv()).seal(Buffer.from(sealedSecret)),
+    });
+    const code = authenticator.generate(sealedSecret);
+    await expect(service.totpValidate('u-1', code)).resolves.toEqual({ valid: true });
+    await expect(service.totpValidate('u-1', '000000')).rejects.toThrow(
+      /Invalid verification code/,
+    );
+  });
+
+  it('totpDisable requires password plus TOTP code and revokes sessions', async () => {
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue({
+      userId: 'u-1',
+      secretEncrypted: new SealService(makeEnv()).seal(Buffer.from(sealedSecret)),
+    });
+    const code = authenticator.generate(sealedSecret);
+    const result = await service.totpDisable('u-1', { password: 'Correct1', code });
+    expect(result).toEqual({ disabled: true });
+    expect(prisma.totpCredential.deleteMany).toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pwdVersion: { increment: 1 } }) }),
+    );
+  });
+
+  it('mfaLoginVerify accepts TOTP codes and single-use recovery codes', async () => {
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue({
+      userId: 'u-1',
+      secretEncrypted: new SealService(makeEnv()).seal(Buffer.from(sealedSecret)),
+    });
+    const mfaToken = new TokenService(makeEnv()).signMfaPendingToken('u-1');
+    const tokens = new TokenService(makeEnv());
+
+    const code = authenticator.generate(sealedSecret);
+    const result = await service.mfaLoginVerify({ mfaToken, code });
+    expect(result.mfaRequired).toBe(false);
+    expect(result.tokens?.refreshToken).toBeDefined();
+
+    const recovery = 'deadbeef';
+    prisma.recoveryCode.findFirst.mockResolvedValue({ id: 'rc-1' });
+    const viaRecovery = await service.mfaLoginVerify({ mfaToken, code: recovery });
+    expect(viaRecovery.tokens).toBeDefined();
+    expect(sentMail.some((m) => m.templateCode === 'MFA_RECOVERY_USED')).toBe(true);
+
+    await expect(service.mfaLoginVerify({ mfaToken: 'garbage', code: '000000' })).rejects.toThrow(
+      INVALID_CREDENTIALS_MESSAGE,
+    );
+    void tokens;
+  });
+
+  it('changePassword verifies the current password and rotates credentials', async () => {
+    await expect(
+      service.changePassword(
+        'u-1',
+        { currentPassword: 'Wrong999', newPassword: 'NewPass99' },
+        'j-1',
+      ),
+    ).rejects.toThrow(INVALID_CREDENTIALS_MESSAGE);
+
+    const result = await service.changePassword(
+      'u-1',
+      { currentPassword: 'Correct1', newPassword: 'NewPass99' },
+      'j-1',
+    );
+    expect(result).toEqual({ changed: true });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pwdVersion: { increment: 1 } }) }),
+    );
+
+    await expect(
+      service.changePassword('u-1', { currentPassword: 'Correct1', newPassword: 'short1' }, 'j-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('change-email requests mail the new address and confirm applies it once', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    await service.requestChangeEmail('u-1', {
+      currentPassword: 'Correct1',
+      newEmail: 'new@example.com',
+    });
+    expect(sentMail.some((m) => m.to === 'new@example.com')).toBe(true);
+
+    prisma.user.findUnique.mockResolvedValue(verifiedUser({ email: 'new@example.com' }));
+    await expect(
+      service.requestChangeEmail('u-1', {
+        currentPassword: 'Correct1',
+        newEmail: 'new@example.com',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    prisma.user.findUnique.mockResolvedValue(null);
+    const token = new TokenService(makeEnv()).signActionToken(
+      'u-1',
+      'CHANGE_EMAIL',
+      60,
+      'fresh@example.com',
+    );
+    const result = await service.confirmChangeEmail(token);
+    expect(result).toEqual({ changed: true });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ email: 'fresh@example.com' }) }),
+    );
+    (prisma.usedToken.create as jest.Mock).mockRejectedValueOnce(new Error('P2002'));
+    await expect(service.confirmChangeEmail(token)).rejects.toThrow(INVALID_TOKEN_MESSAGE);
+  });
+
+  it('mails resend and forgot tokens for eligible accounts', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce(verifiedUser({ emailVerifiedAt: null }))
+      .mockResolvedValueOnce(verifiedUser());
+    await service.resendVerification({ email: 'parent@example.com' });
+    await service.forgotPassword({ email: 'parent@example.com' });
+    expect(sentMail.some((m) => m.templateCode === 'VERIFY_EMAIL')).toBe(true);
+    expect(sentMail.some((m) => m.templateCode === 'RESET_PASSWORD')).toBe(true);
+  });
+
+  it('reports recovery code balance and mfa methods', async () => {
+    await expect(service.recoveryCodesRemaining('u-1')).resolves.toEqual({ remaining: 10 });
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue(null);
+    await expect(service.mfaMethods('u-1')).resolves.toEqual([{ type: 'totp', enabled: false }]);
+  });
+
+  it('requires the TOTP code on sensitive operations when MFA is enabled', async () => {
+    (prisma.totpCredential.findUnique as jest.Mock).mockResolvedValue({
+      userId: 'u-1',
+      secretEncrypted: new SealService(makeEnv()).seal(Buffer.from(sealedSecret)),
+    });
+    await expect(
+      service.changePassword(
+        'u-1',
+        { currentPassword: 'Correct1', newPassword: 'NewPass99' },
+        'j-1',
+      ),
+    ).rejects.toThrow(/TOTP code required/);
+
+    const code = authenticator.generate(sealedSecret);
+    await expect(service.deactivate('u-1', { password: 'Correct1', code }, 'j-1')).resolves.toEqual(
+      { deactivated: true },
+    );
+  });
+
+  it('deactivate soft-deletes and revokes everything', async () => {
+    const result = await service.deactivate('u-1', { password: 'Correct1' }, 'j-1');
+    expect(result).toEqual({ deactivated: true });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+    );
+    await expect(service.deactivate('u-1', { password: 'Wrong999' }, 'j-1')).rejects.toThrow(
+      INVALID_CREDENTIALS_MESSAGE,
+    );
   });
 });

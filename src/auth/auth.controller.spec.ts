@@ -17,6 +17,17 @@ describe('AuthController', () => {
     revokeSession: jest.fn(),
     me: jest.fn(),
     auditLog: jest.fn(),
+    changePassword: jest.fn(),
+    requestChangeEmail: jest.fn(),
+    confirmChangeEmail: jest.fn(),
+    deactivate: jest.fn(),
+    mfaLoginVerify: jest.fn(),
+    mfaMethods: jest.fn(),
+    totpEnable: jest.fn(),
+    totpVerify: jest.fn(),
+    totpValidate: jest.fn(),
+    totpDisable: jest.fn(),
+    recoveryCodesRemaining: jest.fn(),
   };
   const controller = new AuthController(auth as never);
 
@@ -69,6 +80,39 @@ describe('AuthController', () => {
     expect(auth.revokeSession).toHaveBeenCalledWith('u-1', 's-2', '127.0.0.1');
     expect(auth.me).toHaveBeenCalledWith('u-1');
     expect(auth.auditLog).toHaveBeenCalledWith('u-1', 2, 5);
+  });
+
+  it('delegates account-lifecycle endpoints with the current jti', async () => {
+    await controller.changePassword(authedReq.user as never, {} as never, req);
+    await controller.requestChangeEmail(authedReq.user as never, {} as never, req);
+    await controller.confirmChangeEmail({ token: 't' } as never, req);
+    await controller.deactivate(authedReq.user as never, {} as never, req);
+    await controller.deactivateViaDelete(authedReq.user as never, {} as never, req);
+    expect(auth.changePassword).toHaveBeenCalledWith('u-1', {}, 'j-1', '127.0.0.1');
+    expect(auth.requestChangeEmail).toHaveBeenCalledWith('u-1', {}, '127.0.0.1');
+    expect(auth.confirmChangeEmail).toHaveBeenCalledWith('t', '127.0.0.1');
+    expect(auth.deactivate).toHaveBeenCalledTimes(2);
+  });
+
+  it('delegates MFA endpoints', async () => {
+    await controller.mfaLoginVerify({ mfaToken: 'm', code: '123456' } as never, req);
+    await controller.mfaMethods(authedReq.user as never);
+    await controller.totpEnable(authedReq.user as never);
+    await controller.totpVerify(authedReq.user as never, { code: '123456' } as never, req);
+    await controller.totpValidate(authedReq.user as never, { code: '123456' } as never);
+    await controller.totpDisable(authedReq.user as never, {} as never, req);
+    await controller.recoveryCodes(authedReq.user as never);
+    expect(auth.mfaLoginVerify).toHaveBeenCalledWith(
+      { mfaToken: 'm', code: '123456' },
+      '127.0.0.1',
+      'ua',
+    );
+    expect(auth.mfaMethods).toHaveBeenCalledWith('u-1');
+    expect(auth.totpEnable).toHaveBeenCalledWith('u-1');
+    expect(auth.totpVerify).toHaveBeenCalledWith('u-1', '123456', '127.0.0.1');
+    expect(auth.totpValidate).toHaveBeenCalledWith('u-1', '123456');
+    expect(auth.totpDisable).toHaveBeenCalledWith('u-1', {}, '127.0.0.1');
+    expect(auth.recoveryCodesRemaining).toHaveBeenCalledWith('u-1');
   });
 
   it('revokeSession resolves with revoked true', async () => {

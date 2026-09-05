@@ -27,6 +27,8 @@ export interface ActionTokenClaims extends JwtPayload {
   type: 'action';
   purpose: ActionPurpose;
   jti: string;
+  /** Flow-specific payload, e.g. the new address for CHANGE_EMAIL. */
+  target?: string;
 }
 
 const CURRENT_KID = 'current';
@@ -87,14 +89,23 @@ export class TokenService {
   }
 
   /** Single-use flow tokens (verify-email 24h, reset-password 15m, change-email 24h). */
-  signActionToken(userId: string, purpose: ActionPurpose, ttlSeconds: number): string {
-    return jwt.sign({ type: 'action', purpose, jti: randomUUID() }, this.env.jwtSecret, {
-      algorithm: HS256,
-      keyid: CURRENT_KID,
-      subject: userId,
-      issuer: this.env.jwtIssuer,
-      expiresIn: ttlSeconds,
-    });
+  signActionToken(
+    userId: string,
+    purpose: ActionPurpose,
+    ttlSeconds: number,
+    target?: string,
+  ): string {
+    return jwt.sign(
+      { type: 'action', purpose, jti: randomUUID(), ...(target === undefined ? {} : { target }) },
+      this.env.jwtSecret,
+      {
+        algorithm: HS256,
+        keyid: CURRENT_KID,
+        subject: userId,
+        issuer: this.env.jwtIssuer,
+        expiresIn: ttlSeconds,
+      },
+    );
   }
 
   verify(token: string, expectedType: 'access' | 'mfa_pending' | 'action'): JwtPayload {

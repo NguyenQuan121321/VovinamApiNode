@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Logger } from 'pino';
 import bcrypt from 'bcryptjs';
 import type { User } from '@prisma/client';
@@ -12,7 +18,15 @@ import type { MailPort } from './mail/mail.port';
 import { MAIL_PORT } from './mail/mail.port';
 import { validatePasswordPolicy } from './domain/password-policy';
 import { RefreshTokenService } from './domain/refresh-token.service';
-import { TokenService, type ActionPurpose } from './domain/token.service';
+import { sha256Hex, TokenService, type ActionPurpose } from './domain/token.service';
+import { SealService } from './mfa/seal.service';
+import { generateRecoveryCodes, TotpService, type TotpEnrollment } from './mfa/totp.service';
+import type {
+  ChangeEmailRequestDto,
+  ChangePasswordDto,
+  SensitiveOperationDto,
+} from './dto/account.dto';
+import type { MfaLoginVerifyDto, TotpDisableDto } from './dto/mfa.dto';
 import type {
   EmailOnlyDto,
   LoginDto,
@@ -66,6 +80,8 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly refreshTokens: RefreshTokenService,
     private readonly audit: AuditService,
+    private readonly seal: SealService,
+    private readonly totp: TotpService,
     @Inject(MAIL_PORT) private readonly mail: MailPort,
     @Inject(SHARED_STORE) private readonly store: SharedStore,
     @Inject(APP_LOGGER) private readonly logger: Logger,
@@ -502,6 +518,289 @@ export class AuthService {
     };
   }
 
+  // ── MFA (TOTP + recovery codes) ─────────────────────────────────────────────
+
+  async totpEnable(userId: string): Promise<Omit<TotpEnrollment, 'secret'>> {
+    const existing = await this.prisma.totpCredential.findUnique({ where: { userId } });
+    if (existing !== null) {
+      throw new ConflictException('MFA is already enabled');
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const enrollment = await this.totp.createEnrollment(user.email);
+    this.totp.stashPendingSecret(userId, enrollment.secret);
+    return { otpauthUrl: enrollment.otpauthUrl, qrDataUrl: enrollment.qrDataUrl };
+  }
+
+  async totpVerify(
+    userId: string,
+    code: string,
+    ip?: string,
+  ): Promise<{ recoveryCodes: string[] }> {
+    const secret = this.totp.takePendingSecret(userId);
+    if (secret === undefined) {
+      throw new BadRequestException('No pending MFA enrollment');
+    }
+    if (!this.totp.verifyCode(userId, secret, code)) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+    const codes = generateRecoveryCodes(10);
+    await this.prisma.$transaction([
+      this.prisma.totpCredential.create({
+        data: {
+          userId,
+          secretEncrypted: this.seal.seal(Buffer.from(secret)),
+          enabledAt: new Date(),
+        },
+      }),
+      ...codes.map((code) =>
+        this.prisma.recoveryCode.create({ data: { userId, codeHash: sha256Hex(code) } }),
+      ),
+    ]);
+    this.audit.record({ userId, event: 'mfa_enabled', success: true, ip });
+    return { recoveryCodes: codes };
+  }
+
+  async totpValidate(userId: string, code: string): Promise<{ valid: boolean }> {
+    const credential = await this.prisma.totpCredential.findUnique({ where: { userId } });
+    if (credential === null) {
+      throw new BadRequestException('MFA is not enabled');
+    }
+    const secret = this.seal.unseal(credential.secretEncrypted).toString();
+    if (!this.totp.validateCode(userId, secret, code)) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+    return { valid: true };
+  }
+
+  async totpDisable(
+    userId: string,
+    dto: TotpDisableDto,
+    ip?: string,
+  ): Promise<{ disabled: boolean }> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await this.verifySensitiveCredentials(user, dto.password, dto.code);
+    await this.prisma.$transaction([
+      this.prisma.totpCredential.deleteMany({ where: { userId } }),
+      this.prisma.recoveryCode.deleteMany({ where: { userId } }),
+      this.prisma.session.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+      this.prisma.user.update({ where: { id: userId }, data: { pwdVersion: { increment: 1 } } }),
+    ]);
+    this.audit.record({ userId, event: 'mfa_disabled', success: true, ip });
+    return { disabled: true };
+  }
+
+  async recoveryCodesRemaining(userId: string): Promise<{ remaining: number }> {
+    const remaining = await this.prisma.recoveryCode.count({ where: { userId, usedAt: null } });
+    return { remaining };
+  }
+
+  async mfaMethods(userId: string): Promise<Array<{ type: string; enabled: boolean }>> {
+    const credential = await this.prisma.totpCredential.findUnique({ where: { userId } });
+    return [{ type: 'totp', enabled: credential !== null }];
+  }
+
+  /** Second login leg when TOTP is enabled: mfa_pending token + TOTP or recovery code. */
+  async mfaLoginVerify(
+    dto: MfaLoginVerifyDto,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResult> {
+    let userId: string;
+    try {
+      const claims = this.tokens.verify(dto.mfaToken, 'mfa_pending');
+      if (typeof claims.sub !== 'string') {
+        throw new Error('bad claims');
+      }
+      userId = claims.sub;
+    } catch {
+      throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+    }
+    this.totp.assertNotLocked(userId);
+    const credential = await this.prisma.totpCredential.findUnique({ where: { userId } });
+    if (credential === null) {
+      throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+    }
+    const secret = this.seal.unseal(credential.secretEncrypted).toString();
+    const totpOk = this.totp.verifyCode(userId, secret, dto.code);
+    let usedRecoveryCode = false;
+    if (!totpOk && dto.code.length === 8) {
+      const codeHash = sha256Hex(dto.code);
+      const row = await this.prisma.recoveryCode.findFirst({
+        where: { userId, codeHash, usedAt: null },
+      });
+      if (row !== null) {
+        await this.prisma.recoveryCode.update({
+          where: { id: row.id },
+          data: { usedAt: new Date() },
+        });
+        usedRecoveryCode = true;
+      }
+    }
+    if (!totpOk && !usedRecoveryCode) {
+      throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.deletedAt !== null || !user.isActive) {
+      throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+    }
+    const tokens = await this.issueSession(user.id, ip, userAgent);
+    await this.alertOnNewIp(user, ip);
+    this.audit.record({
+      userId,
+      event: 'login',
+      success: true,
+      ip,
+      detail: usedRecoveryCode ? 'mfa_recovery_used' : 'mfa',
+    });
+    if (usedRecoveryCode) {
+      this.audit.record({ userId, event: 'mfa_recovery_used', success: true, ip });
+      await this.notify(
+        user.email,
+        'MFA_RECOVERY_USED',
+        'A recovery code was used to sign in',
+        'A single-use recovery code was used to sign in to your account. If this was not you, reset your password immediately.',
+      );
+    }
+    return { mfaRequired: false, tokens, user: toPublicUser(user, true) };
+  }
+
+  // ── Account lifecycle ───────────────────────────────────────────────────────
+
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+    currentJti: string,
+    ip?: string,
+  ): Promise<{ changed: boolean }> {
+    if (!validatePasswordPolicy(dto.newPassword, [])) {
+      throw new BadRequestException(
+        'Password must be at least 8 characters and contain letters and digits',
+      );
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await this.verifySensitiveCredentials(user, dto.currentPassword, dto.code);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash: await bcrypt.hash(dto.newPassword, BCRYPT_COST),
+          pwdVersion: { increment: 1 },
+        },
+      }),
+      this.prisma.session.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+    ]);
+    this.store.set(`jti:denylist:${currentJti}`, true, this.tokens.accessTtlMs);
+    this.audit.record({ userId, event: 'password_changed', success: true, ip });
+    return { changed: true };
+  }
+
+  async requestChangeEmail(
+    userId: string,
+    dto: ChangeEmailRequestDto,
+    ip?: string,
+  ): Promise<{ sent: boolean }> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await this.verifySensitiveCredentials(user, dto.currentPassword);
+    const taken = await this.prisma.user.findUnique({ where: { email: dto.newEmail } });
+    if (taken !== null) {
+      throw new ConflictException('Email already in use');
+    }
+    const token = this.tokens.signActionToken(
+      userId,
+      'CHANGE_EMAIL',
+      VERIFY_EMAIL_TTL_SECONDS,
+      dto.newEmail,
+    );
+    await this.notify(
+      dto.newEmail,
+      'CHANGE_EMAIL',
+      'Confirm your new email address',
+      `Use this token to confirm the email change (valid 24 hours): ${token}`,
+    );
+    this.audit.record({ userId, event: 'email_change_requested', success: true, ip });
+    return { sent: true };
+  }
+
+  async confirmChangeEmail(token: string, ip?: string): Promise<{ changed: boolean }> {
+    const { userId, jti, target } = this.parseActionToken(token, 'CHANGE_EMAIL');
+    if (target === undefined) {
+      throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+    }
+    const taken = await this.prisma.user.findUnique({ where: { email: target } });
+    if (taken !== null) {
+      throw new ConflictException('Email already in use');
+    }
+    try {
+      await this.prisma.$transaction([
+        this.prisma.usedToken.create({
+          data: {
+            jti,
+            userId,
+            purpose: 'CHANGE_EMAIL',
+            expiresAt: new Date(Date.now() + USED_TOKEN_RETENTION_MS),
+          },
+        }),
+        this.prisma.user.update({
+          where: { id: userId },
+          data: { email: target, emailVerifiedAt: new Date(), pwdVersion: { increment: 1 } },
+        }),
+        this.prisma.session.updateMany({
+          where: { userId, revoked: false },
+          data: { revoked: true },
+        }),
+        this.prisma.refreshToken.updateMany({
+          where: { userId, revoked: false },
+          data: { revoked: true },
+        }),
+      ]);
+    } catch {
+      throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+    }
+    this.audit.record({ userId, event: 'email_changed', success: true, ip, detail: target });
+    return { changed: true };
+  }
+
+  async deactivate(
+    userId: string,
+    dto: SensitiveOperationDto,
+    currentJti: string,
+    ip?: string,
+  ): Promise<{ deactivated: boolean }> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await this.verifySensitiveCredentials(user, dto.password, dto.code);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { deletedAt: new Date(), isActive: false },
+      }),
+      this.prisma.session.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+    ]);
+    this.store.set(`jti:denylist:${currentJti}`, true, this.tokens.accessTtlMs);
+    this.audit.record({ userId, event: 'account_deactivated', success: true, ip });
+    return { deactivated: true };
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   private async registerFailedAttempt(user: User, ip?: string): Promise<void> {
@@ -548,8 +847,11 @@ export class AuthService {
   }
 
   /** Signature/type/purpose check only; callers must consume the jti in used_tokens. */
-  private parseActionToken(token: string, purpose: ActionPurpose): { userId: string; jti: string } {
-    let claims: { sub?: string; purpose?: ActionPurpose; jti?: string };
+  private parseActionToken(
+    token: string,
+    purpose: ActionPurpose,
+  ): { userId: string; jti: string; target?: string } {
+    let claims: { sub?: string; purpose?: ActionPurpose; jti?: string; target?: string };
     try {
       claims = this.tokens.verify(token, 'action') as typeof claims;
     } catch {
@@ -559,7 +861,29 @@ export class AuthService {
     if (claims.sub === undefined || claims.jti === undefined || claims.purpose !== purpose) {
       throw new BadRequestException(INVALID_TOKEN_MESSAGE);
     }
-    return { userId: claims.sub, jti: claims.jti };
+    return { userId: claims.sub, jti: claims.jti, target: claims.target };
+  }
+
+  /** Inline confirmation for sensitive operations: password (+ TOTP when enrolled, plan 4.2). */
+  private async verifySensitiveCredentials(
+    user: User,
+    password: string,
+    code?: string,
+  ): Promise<void> {
+    const passwordOk = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordOk) {
+      throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+    }
+    const credential = await this.prisma.totpCredential.findUnique({ where: { userId: user.id } });
+    if (credential !== null) {
+      if (code === undefined) {
+        throw new BadRequestException('TOTP code required');
+      }
+      const secret = this.seal.unseal(credential.secretEncrypted).toString();
+      if (!this.totp.verifyCode(user.id, secret, code)) {
+        throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+      }
+    }
   }
 
   private async revokeEverythingForUser(userId: string, ip?: string): Promise<void> {

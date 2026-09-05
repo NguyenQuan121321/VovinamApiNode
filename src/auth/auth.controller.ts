@@ -23,6 +23,13 @@ import {
   ResetPasswordDto,
   VerifyEmailDto,
 } from './dto/auth.dto';
+import {
+  ChangeEmailConfirmDto,
+  ChangeEmailRequestDto,
+  ChangePasswordDto,
+  SensitiveOperationDto,
+} from './dto/account.dto';
+import { MfaLoginVerifyDto, TotpCodeDto, TotpDisableDto } from './dto/mfa.dto';
 import { PageDto } from '../common/pagination.dto';
 
 @Controller('auth')
@@ -118,5 +125,102 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   auditLog(@CurrentUser() user: { id: string }, @Query() query: PageDto) {
     return this.auth.auditLog(user.id, query.page, query.limit);
+  }
+
+  // ── Account lifecycle ───────────────────────────────────────────────────────
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  changePassword(
+    @CurrentUser() user: { id: string; jti: string },
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.changePassword(user.id, dto, user.jti, req.ip);
+  }
+
+  @Post('change-email/request')
+  @UseGuards(JwtAuthGuard)
+  requestChangeEmail(
+    @CurrentUser() user: { id: string },
+    @Body() dto: ChangeEmailRequestDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.requestChangeEmail(user.id, dto, req.ip);
+  }
+
+  @Post('change-email/confirm')
+  confirmChangeEmail(@Body() dto: ChangeEmailConfirmDto, @Req() req: Request) {
+    return this.auth.confirmChangeEmail(dto.token, req.ip);
+  }
+
+  @Post('deactivate')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  deactivate(
+    @CurrentUser() user: { id: string; jti: string },
+    @Body() dto: SensitiveOperationDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.deactivate(user.id, dto, user.jti, req.ip);
+  }
+
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  deactivateViaDelete(
+    @CurrentUser() user: { id: string; jti: string },
+    @Body() dto: SensitiveOperationDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.deactivate(user.id, dto, user.jti, req.ip);
+  }
+
+  // ── MFA ─────────────────────────────────────────────────────────────────────
+
+  @Post('mfa/login-verify')
+  @HttpCode(200)
+  mfaLoginVerify(@Body() dto: MfaLoginVerifyDto, @Req() req: Request) {
+    return this.auth.mfaLoginVerify(dto, req.ip, req.headers['user-agent']);
+  }
+
+  @Get('mfa/methods')
+  @UseGuards(JwtAuthGuard)
+  mfaMethods(@CurrentUser() user: { id: string }) {
+    return this.auth.mfaMethods(user.id);
+  }
+
+  @Post('mfa/totp/enable')
+  @UseGuards(JwtAuthGuard)
+  totpEnable(@CurrentUser() user: { id: string }) {
+    return this.auth.totpEnable(user.id);
+  }
+
+  @Post('mfa/totp/verify')
+  @UseGuards(JwtAuthGuard)
+  totpVerify(@CurrentUser() user: { id: string }, @Body() dto: TotpCodeDto, @Req() req: Request) {
+    return this.auth.totpVerify(user.id, dto.code, req.ip);
+  }
+
+  @Post('mfa/totp/validate')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  totpValidate(@CurrentUser() user: { id: string }, @Body() dto: TotpCodeDto) {
+    return this.auth.totpValidate(user.id, dto.code);
+  }
+
+  @Post('mfa/totp/disable')
+  @UseGuards(JwtAuthGuard)
+  totpDisable(
+    @CurrentUser() user: { id: string },
+    @Body() dto: TotpDisableDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.totpDisable(user.id, dto, req.ip);
+  }
+
+  @Get('mfa/totp/recovery-codes')
+  @UseGuards(JwtAuthGuard)
+  recoveryCodes(@CurrentUser() user: { id: string }) {
+    return this.auth.recoveryCodesRemaining(user.id);
   }
 }
