@@ -32,6 +32,24 @@ enum BeltRankGroup {
   HUYEN
 }
 
+enum StudentStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  LEFT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum LinkRelationship {
+  PARENT
+  GUARDIAN
+}
+
 /// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
 /// never a hard DELETE, so every FK below uses onDelete: Restrict.
 model User {
@@ -55,6 +73,9 @@ model User {
   usedTokens        UsedToken[]
   auditLogs         AuditLog[]
   appSettingUpdates AppSetting[] @relation("AppSettingUpdatedBy")
+  studentProfile    StudentProfile?
+  parentLinks       ParentStudentLink[] @relation("ParentLink")
+  verifiedLinks     ParentStudentLink[] @relation("LinkVerifier")
 
   @@map("users")
 }
@@ -171,5 +192,56 @@ model BeltRank {
   orderIndex Int           @unique @map("order_index")
   isActive   Boolean       @default(true) @map("is_active")
 
+  students StudentProfile[]
+
   @@map("belt_ranks")
+}
+
+/// One profile per student. Minors (plan 7.1) get a profile WITHOUT a user account;
+/// an adult student self-registers and the admin links/approves the profile
+/// (userId set, status PENDING -> ACTIVE). Soft delete only (plan 7.2).
+model StudentProfile {
+  id                    String        @id @default(uuid()) @db.Uuid
+  userId                String?       @unique @map("user_id") @db.Uuid
+  user                  User?         @relation(fields: [userId], references: [id])
+  fullName              String        @map("full_name") @db.VarChar(100)
+  dob                   DateTime      @db.Date
+  gender                Gender
+  phone                 String?       @db.VarChar(20)
+  address               String?       @db.VarChar(255)
+  emergencyContactName  String?       @map("emergency_contact_name") @db.VarChar(100)
+  emergencyContactPhone String?       @map("emergency_contact_phone") @db.VarChar(20)
+  medicalNotes          String?       @map("medical_notes") @db.VarChar(1000)
+  currentBeltRankId     Int?          @map("current_belt_rank_id")
+  currentBeltRank       BeltRank?     @relation(fields: [currentBeltRankId], references: [id])
+  inviteCode            String        @unique @map("invite_code") @db.Char(8)
+  joinedAt              DateTime      @default(now()) @map("joined_at")
+  status                StudentStatus @default(PENDING)
+  deletedAt             DateTime?     @map("deleted_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  parentLinks ParentStudentLink[]
+
+  @@map("student_profiles")
+}
+
+/// Parent-child link through a single-use invite code (plan 7.1). Direct entry of
+/// student ids is never accepted.
+model ParentStudentLink {
+  id               String          @id @default(uuid()) @db.Uuid
+  parentUserId     String          @map("parent_user_id") @db.Uuid
+  parent           User            @relation("ParentLink", fields: [parentUserId], references: [id], onDelete: Cascade)
+  studentId        String          @map("student_id") @db.Uuid
+  student          StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  relationship     LinkRelationship @default(PARENT)
+  verified         Boolean         @default(false)
+  verifiedByUserId String?         @map("verified_by_user_id") @db.Uuid
+  verifiedByUser   User?           @relation("LinkVerifier", fields: [verifiedByUserId], references: [id])
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  @@unique([parentUserId, studentId])
+  @@index([parentUserId])
+  @@index([studentId])
+  @@map("parent_student_links")
 }
