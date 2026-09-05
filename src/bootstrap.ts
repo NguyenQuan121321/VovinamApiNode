@@ -26,7 +26,7 @@ function swaggerCsp() {
  * production wiring (envelope, filters, helmet, pipes, prefix, Swagger gating).
  */
 export async function createApp() {
-  const app = await NestFactory.create(AppModule, { logger: false, bodyParser: false });
+  const app = await NestFactory.create(AppModule, { logger: ['error', 'warn'], bodyParser: false });
   const env = app.get(EnvService);
 
   app.useLogger(app.get(PinoLoggerService));
