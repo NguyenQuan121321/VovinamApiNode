@@ -15,12 +15,17 @@ updates:
       # tech-debt report and a deliberate migration instead of an auto PR.
       minor-and-patch:
         update-types:
-          - minor
-          - patch
+          - version-update:semver-minor
+          - version-update:semver-patch
     ignore:
       - dependency-name: "*"
         update-types:
           - version-update:semver-major
+      # prisma 6.13+ pulls deepmerge-ts <8 (GHSA-ggr8-5vv4-36mx, high) — blocked by
+      # the audit gate until a patched 6.x ships; revisit deliberately.
+      - dependency-name: "prisma"
+      - dependency-name: "@prisma/client"
+
 
   - package-ecosystem: github-actions
     directory: /
@@ -29,3 +34,7 @@ updates:
     labels:
       - dependencies
       - ci
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major

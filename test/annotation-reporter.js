@@ -7,7 +7,7 @@ class AnnotationReporter {
     for (const suite of results.testResults) {
       const relative = suite.testFilePath.replace(/^.*[\\/]test[\\/]/, 'test/');
 
-      if (suite.testExecError !== undefined || suite.failureMessage !== undefined) {
+      if (suite.testExecError || suite.failureMessage) {
         const detail = String(suite.failureMessage ?? suite.testExecError)
           .split('\n')
           .slice(0, 4)

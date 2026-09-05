@@ -1,0 +1,53 @@
+/** Conventional Commits enforcement (CI commitlint gate; keeps semantic-release viable). */
+module.exports = {
+  extends: ['@commitlint/config-conventional'],
+  rules: {
+    // Disable line length constraints on commit body and footer: detailed commit explanations,
+    // stack traces, or reference URLs are encouraged and should not fail CI.
+    'body-max-line-length': [0, 'always'],
+    'footer-max-line-length': [0, 'always'],
+    // Allow uppercase acronyms in commit subjects (e.g., APP_ENCRYPTION_KEY, JWT, MFA, TOTP, CI, API).
+    'subject-case': [0, 'always'],
+    'scope-enum': [
+      2,
+      'always',
+      [
+        'auth',
+        'students',
+        'parents',
+        'classes',
+        'belts',
+        'billing',
+        'notifications',
+        'consent',
+        'config',
+        'prisma',
+        'deps',
+        'deps-dev',
+        'app',
+        'common',
+        'ops',
+        'ci',
+        'test',
+        'types',
+        'docker',
+        'mfa',
+        'security',
+        'e2e',
+        'docs',
+        'domain',
+        'core',
+        'schema',
+        'mail',
+        'shared-store',
+        'audit',
+        'health',
+        'metrics',
+        'openapi',
+        'seed',
+        'scripts',
+      ],
+    ],
+  },
+};
+

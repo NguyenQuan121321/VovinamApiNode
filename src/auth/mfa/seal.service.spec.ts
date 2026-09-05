@@ -23,14 +23,14 @@ describe('SealService (AES-256-GCM)', () => {
   it('round-trips a secret', () => {
     const plain = Buffer.from('TOTPSECRET123456');
     const sealed = service.seal(plain);
-    expect(sealed.equals(plain)).toBe(false);
+    expect(sealed).not.toEqual(plain);
     expect(sealed.length).toBe(12 + plain.length + 16);
-    expect(service.unseal(sealed).equals(plain)).toBe(true);
+    expect(service.unseal(sealed)).toEqual(plain);
   });
 
   it('produces a fresh IV per call', () => {
     const plain = Buffer.from('same-plain-value');
-    expect(service.seal(plain).equals(service.seal(plain))).toBe(false);
+    expect(service.seal(plain)).not.toEqual(service.seal(plain));
   });
 
   it('fails authentication on tampered ciphertext', () => {

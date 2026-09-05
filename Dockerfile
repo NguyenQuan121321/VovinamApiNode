@@ -14,13 +14,14 @@ RUN npm run build
 
 # Runtime dependencies installed separately: npm prune does not reliably drop
 # transitive devDependencies, and shipping them re-introduces scanner findings.
-# --ignore-scripts skips postinstall (prisma CLI is a devDependency); the client
-# is generated with a version-pinned CLI instead.
+# Runtime dependencies only: prisma lives in dependencies, so the postinstall
+# (prisma generate) runs with a CLI whose version always matches @prisma/client,
+# including the engine binaries that --ignore-scripts would have skipped.
 FROM node:22-alpine AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev --ignore-scripts && npx --yes prisma@6.12.0 generate
+RUN npm ci --omit=dev
 
 FROM node:22-alpine AS runner
 ENV NODE_ENV=production
