@@ -25,6 +25,7 @@ const config: Config = {
   clearMocks: true,
   setupFiles: ['<rootDir>/test/jest-setup.ts'],
   passWithNoTests: true,
+  reporters: ['default', '<rootDir>/test/annotation-reporter.js'],
 };
 
 export default config;
