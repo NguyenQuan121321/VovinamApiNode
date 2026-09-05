@@ -145,7 +145,9 @@ describe('S-09: forgot-password anti-enumeration (e2e)', () => {
     // Warm up HTTP + JIT so first-request latency does not skew the comparison.
     for (let i = 0; i < 3; i += 1) {
       await post('/api/v1/auth/forgot-password', { email: existing }).expect(200);
-      await post('/api/v1/auth/forgot-password', { email: `warmup-${stamp}@example.com` }).expect(200);
+      await post('/api/v1/auth/forgot-password', { email: `warmup-${stamp}@example.com` }).expect(
+        200,
+      );
     }
     const startExisting = process.hrtime.bigint();
     let existingBody: unknown;
