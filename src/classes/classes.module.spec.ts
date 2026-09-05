@@ -1,9 +1,11 @@
 import { ClassesModule } from './classes.module';
 import { ClassesService } from './classes.service';
+import { EnrollmentsService } from './enrollments.service';
 
-describe('ClassesModule (stub until P2)', () => {
-  it('keeps module and placeholder service loadable for the coverage floor', () => {
-    expect(new ClassesModule()).toBeDefined();
-    expect(new ClassesService().implementedInPhase).toBe('P2');
+describe('ClassesModule', () => {
+  it('exposes the module and its services (imported by the attendance module)', () => {
+    expect(ClassesModule).toBeDefined();
+    expect(ClassesService).toBeDefined();
+    expect(EnrollmentsService).toBeDefined();
   });
 });
