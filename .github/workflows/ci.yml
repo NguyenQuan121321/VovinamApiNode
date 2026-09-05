@@ -43,11 +43,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Semgrep security rules (OWASP top ten, TypeScript, secrets)
+        id: sast
         run: |
+          set +e
           docker run --rm -v "$PWD:/src" --workdir /src \
             semgrep/semgrep:latest semgrep scan \
             --config p/owasp-top-ten --config p/typescript --config p/secrets \
-            --error --metrics=off
+            --metrics=off --json --output /src/semgrep-report.json
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-report
+          path: semgrep-report.json
+          if-no-files-found: ignore
+      - name: Fail on Semgrep findings (emitted as annotations)
+        run: |
+          node -e "
+            const report = require('./semgrep-report.json');
+            const results = report.results ?? [];
+            console.log('Semgrep findings:', results.length);
+            for (const r of results.slice(0, 30)) {
+              const line = r.start?.line ?? 1;
+              console.log('::error file=' + r.path + ',line=' + line + ',title=' + r.check_id + '::' + String(r.extra?.message ?? '').split('\n')[0].slice(0, 120));
+            }
+            process.exit(results.length === 0 ? 0 : 1);
+          "
 
   build-test:
     name: build-test (typecheck, unit, coverage gate)
@@ -156,8 +177,26 @@ jobs:
       - name: Scan image for HIGH/CRITICAL vulnerabilities
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.74.0 image --exit-code 1 --ignore-unfixed \
-            --scanners vuln --severity HIGH,CRITICAL vovinam-api:ci
+            -v "$PWD:/report" aquasec/trivy:0.74.0 image \
+            --ignore-unfixed --scanners vuln --severity HIGH,CRITICAL \
+            --format json --output /report/trivy-report.json vovinam-api:ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          if-no-files-found: ignore
+      - name: Fail on Trivy findings (emitted as annotations)
+        run: |
+          node -e "
+            const report = require('./trivy-report.json');
+            const vulns = (report.Results ?? []).flatMap((r) => r.Vulnerabilities ?? []);
+            console.log('Trivy HIGH/CRITICAL (unfixed excluded):', vulns.length);
+            for (const v of vulns.slice(0, 30)) {
+              console.log('::error title=' + v.VulnerabilityID + ' ' + v.PkgName + '::fixed=' + (v.FixedVersion ?? 'none') + ' - ' + String(v.Title ?? '').slice(0, 100));
+            }
+            process.exit(vulns.length === 0 ? 0 : 1);
+          "
 
   tech-debt-gate:
     name: tech-debt-gate (extraneous deps, outdated report)
@@ -171,11 +210,10 @@ jobs:
       - run: npm ci
       - name: Fail on extraneous packages (leftover install junk)
         run: |
-          # Clean output is "up to date in <n>s"; anything else lists extraneous packages.
-          PRUNE_NOISE=$(npm prune --dry-run | grep -v '^up to date' | grep -v '^$' || true)
-          if [ -n "$PRUNE_NOISE" ]; then
-            echo "$PRUNE_NOISE"
-            echo "::error::Extraneous packages detected — remove them and re-lock dependencies"
+          REMOVED=$(npm prune --dry-run --json | grep -o '"removed": [0-9]*' | grep -o '[0-9]*')
+          echo "npm prune would remove: $REMOVED package(s)"
+          if [ "$REMOVED" != "0" ]; then
+            echo "::error::Extraneous packages detected — run 'npm prune' locally and re-lock dependencies"
             exit 1
           fi
           echo "No extraneous packages"

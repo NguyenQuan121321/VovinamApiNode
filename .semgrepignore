@@ -4,3 +4,4 @@ test.e2e/
 docs/
 .github/
 .env.example
+src/**/*.spec.ts

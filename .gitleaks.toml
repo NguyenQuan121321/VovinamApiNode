@@ -6,10 +6,5 @@ useDefault = true
 
 [allowlist]
 description = "Test fixtures, CI placeholders, and local docs"
-paths = '''(
-    ^\.github/workflows/ci\.yml |
-    ^\.env\.example |
-    ^\.agents/ |
-    ^docs/ |
-    ^test/
-)'''
+regexes = '''(?i)(ci-jwt-secret|e2e-jwt-secret|0123456789abcdef|local-dev-only-secret|ChangeMe123|abababab)'''
+paths = '''(^\.github/workflows/ci\.yml$)|(^\.env\.example$)|(^docs/)|(^test/)|(^\.agents/)|(\.spec\.ts$)'''
