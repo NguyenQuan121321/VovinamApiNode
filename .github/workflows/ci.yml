@@ -160,18 +160,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma migrate deploy
-      - name: Run e2e suite (failures emitted as annotations)
+      - name: Run e2e suite (full output emitted as annotations on failure)
         run: |
           set +e
           npm run test:e2e > e2e-output.txt 2>&1
           EXIT=$?
-          grep -E '✕' e2e-output.txt | head -20 | while IFS= read -r line; do
-            echo "::error title=e2e failed::$line"
-          done
-          grep -A4 'Test suite failed to run' e2e-output.txt | head -24 | while IFS= read -r line; do
-            echo "::error title=e2e suite error::$line"
-          done
-          tail -30 e2e-output.txt
+          if [ "$EXIT" != "0" ]; then
+            # The output is small (~1KB); mirror every line into annotations so the
+            # failure is readable on the PR without Actions log access.
+            grep -v '^$' e2e-output.txt | head -45 | while IFS= read -r line; do
+              safe=$(printf '%s' "$line" | cut -c1-160)
+              echo "::error title=e2e::$safe"
+            done
+          fi
           exit $EXIT
       - uses: actions/upload-artifact@v4
         if: always()
@@ -202,9 +203,9 @@ jobs:
       - name: Scan image for HIGH/CRITICAL vulnerabilities
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD:/report" aquasec/trivy:0.74.0 image \
+            -v "$PWD:/report" -w /report aquasec/trivy:0.74.0 image \
             --ignore-unfixed --scanners vuln --severity HIGH,CRITICAL \
-            --skip-files "/usr/local/lib/node_modules/npm/.*" \
+            --skip-files "/usr/local/lib/node_modules/npm/**" \
             --format json --output /report/trivy-report.json vovinam-api:ci
       - uses: actions/upload-artifact@v4
         if: always()
