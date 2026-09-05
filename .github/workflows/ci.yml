@@ -151,7 +151,7 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: postgresql://vovinam:vovinam@localhost:5432/vovinam_test?schema=public
       JWT_SECRET: ci-jwt-secret-0123456789abcdef0123456789abcdef
-      APP_ENCRYPTION_KEY: ababababababababababababababababababababababababababababababab
+      APP_ENCRYPTION_KEY: abababababababababababababababababababababababababababababababab
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
