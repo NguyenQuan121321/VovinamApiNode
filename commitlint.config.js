@@ -16,6 +16,7 @@ module.exports = {
         'students',
         'parents',
         'classes',
+        'attendance',
         'belts',
         'exams',
         'billing',
