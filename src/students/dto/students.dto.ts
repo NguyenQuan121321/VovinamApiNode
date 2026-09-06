@@ -8,11 +8,10 @@ import {
   IsString,
   IsUUID,
   Length,
-  Max,
   MaxLength,
-  Min,
   MinLength,
 } from 'class-validator';
+import { PageDto } from '../../common/pagination.dto';
 
 export class CreateStudentDto {
   @IsString()
@@ -110,20 +109,7 @@ export class UpdateStudentDto {
   status?: 'PENDING' | 'ACTIVE' | 'PAUSED' | 'LEFT';
 }
 
-export class ListStudentsQueryDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit: number = 20;
-
+export class ListStudentsQueryDto extends PageDto {
   @IsOptional()
   @IsEnum(['PENDING', 'ACTIVE', 'PAUSED', 'LEFT'])
   status?: 'PENDING' | 'ACTIVE' | 'PAUSED' | 'LEFT';
