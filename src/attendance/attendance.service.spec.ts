@@ -122,6 +122,14 @@ describe('AttendanceService', () => {
         service.createSession(instructor, { classId: 'class-1', sessionDate: '2026-09-06' }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
+
+    it('rejects new sessions for paused or archived classes', async () => {
+      classes.assertManageable.mockResolvedValue({ ...cls, status: 'ARCHIVED' });
+      await expect(
+        service.createSession(instructor, { classId: 'class-1', sessionDate: '2026-09-06' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.attendanceSession.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('upsertRecords', () => {

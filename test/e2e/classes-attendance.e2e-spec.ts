@@ -180,6 +180,52 @@ describe('Classes, enrollments, attendance (e2e)', () => {
     expect(detail.body.data.activeEnrollmentCount).toBe(1);
   });
 
+  it('admin edits the class, shrinks-guarded, and manages schedules and enrollment lifecycle', async () => {
+    await send('patch', `/api/v1/classes/${classId}`, { name: 'White Belt A2' }, adminToken).expect(
+      200,
+    );
+    const detail = await get(`/api/v1/classes/${classId}`, adminToken).expect(200);
+    expect(detail.body.data).toMatchObject({ name: 'White Belt A2' });
+
+    // Enroll a second student, then a capacity shrink below the active count is a 409.
+    const enroll = await send(
+      'post',
+      '/api/v1/enrollments',
+      { studentId: secondProfileId, classId },
+      adminToken,
+    ).expect(201);
+    const enrollmentId = enroll.body.data.id as string;
+    await send('patch', `/api/v1/classes/${classId}`, { capacity: 1 }, adminToken).expect(409);
+
+    // Soft-leave: repeating the removal answers 404.
+    await send('delete', `/api/v1/enrollments/${enrollmentId}`, {}, adminToken).expect(200);
+    await send('delete', `/api/v1/enrollments/${enrollmentId}`, {}, adminToken).expect(404);
+
+    // Schedule lifecycle: add, then remove (and remove again for a 404).
+    const schedule = await send(
+      'post',
+      `/api/v1/classes/${classId}/schedules`,
+      { weekday: 3, startTime: '19:00', endTime: '21:00', effectiveFrom: '2026-02-01' },
+      adminToken,
+    ).expect(201);
+    const scheduleId = schedule.body.data.id as string;
+    await send(
+      'delete',
+      `/api/v1/classes/${classId}/schedules/${scheduleId}`,
+      {},
+      adminToken,
+    ).expect(200);
+    await send(
+      'delete',
+      `/api/v1/classes/${classId}/schedules/${scheduleId}`,
+      {},
+      adminToken,
+    ).expect(404);
+
+    // Malformed UUID path params answer 400, never a 500 (P2023 leak).
+    await get('/api/v1/classes/not-a-uuid', adminToken).expect(400);
+  });
+
   it('scopes student visibility per role now that enrollments exist (S-04)', async () => {
     // The class instructor sees the enrolled student with no contact fields (7.4).
     const own = await get(`/api/v1/students/${studentProfileId}`, instructorToken).expect(200);
@@ -247,7 +293,7 @@ describe('Classes, enrollments, attendance (e2e)', () => {
       `/api/v1/attendance-sessions/${sessionId}/records`,
       { records: [{ studentId: studentProfileId, status: 'PRESENT', note: 'On time' }] },
       instructorToken,
-    ).expect(201);
+    ).expect(200);
     expect(first.body.data[0]).toMatchObject({ status: 'PRESENT', note: 'On time' });
 
     // Re-submitting the same student overwrites (bulk upsert semantics).
@@ -256,7 +302,7 @@ describe('Classes, enrollments, attendance (e2e)', () => {
       `/api/v1/attendance-sessions/${sessionId}/records`,
       { records: [{ studentId: studentProfileId, status: 'ABSENT', note: 'Sick' }] },
       instructorToken,
-    ).expect(201);
+    ).expect(200);
 
     const records = await get(
       `/api/v1/attendance-sessions/${sessionId}/records`,
@@ -287,7 +333,8 @@ describe('Classes, enrollments, attendance (e2e)', () => {
     expect(history.body.data.total).toBe(1);
     expect(history.body.data.items[0]).toMatchObject({
       status: 'ABSENT',
-      className: 'White Belt A',
+      // The class was renamed by the admin-edit test above.
+      className: 'White Belt A2',
     });
 
     const summary = await get(

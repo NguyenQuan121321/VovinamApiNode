@@ -314,7 +314,18 @@ describe('ExamsService', () => {
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
-      prisma.beltRank.findUnique.mockResolvedValue({ id: 4 });
+      prisma.beltRank.findUnique.mockResolvedValue({ id: 4, isActive: false });
+      await expect(
+        service.create({
+          title: 'Grading',
+          examDate: '2026-03-20',
+          targetRankId: 4,
+          feeAmount: 1,
+          registrationDeadline: '2026-03-01',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      prisma.beltRank.findUnique.mockResolvedValue({ id: 4, isActive: true });
       prisma.beltExam.findFirst.mockResolvedValue(null);
       prisma.beltExam.findUnique.mockResolvedValue(null);
       await expect(

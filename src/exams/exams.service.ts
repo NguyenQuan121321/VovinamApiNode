@@ -285,6 +285,10 @@ export class ExamsService {
     if (rank === null) {
       throw new NotFoundException('Not found');
     }
+    // Exams may not target a deactivated rank (only existence was checked before).
+    if (!rank.isActive) {
+      throw new ConflictException('Belt rank is not active');
+    }
   }
 
   private assertDateOrder(registrationDeadline: string | Date, examDate: string | Date): void {

@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P3 (belts & exams) implemented on branch `phase/3-belts-exams`: all local gates green, ready for owner to open the PR and let CI run. PR #14 (P2 increment 2) MERGED into `main` (merge commit `5ff70ff`, CI 13/13 success + deploy skipped) — P2 is COMPLETE.**
+Current status: **P3 on `phase/3-belts-exams` hardened after a full code-consistency + endpoint-coverage audit (user request): UUID-param 500 leak fixed, 3 business guards added, ALL 61 OpenAPI operations now e2e-tested (0 uncovered). All gates green — ready for owner to open the PR. PR #14 (P2) already merged (5ff70ff).**
 
 ## Phase task table
 
@@ -26,6 +26,20 @@ Current status: **P3 (belts & exams) implemented on branch `phase/3-belts-exams`
 | P4–P7 | — | NOT STARTED | Billing payments/QR/webhooks/generate-monthly + reports (P4); notifications/consent (P5); hardening (P6); go-live (P7) |
 
 ## Handoff log
+
+### 2026-09-06 — Session 14: consistency audit, logic-gap fixes, 100% endpoint e2e coverage (user request)
+- User asked: (1) is the code consistent across modules or does every place do it differently — synchronize it; (2) review for logic/business holes; (3) test ALL endpoints. All three addressed on `phase/3-belts-exams` before the PR.
+- **Static gates re-verified fresh**: format ✓ lint ✓ typecheck ✓ 198/198 unit ✓ coverage gate exit 0 ✓ build ✓.
+- **Consistency fixes**: `ListStudentsQueryDto` now extends the shared `PageDto` (was duplicating page/limit validation); bulk attendance record upserts now answer 200 like every other action-style POST (regenerate invite code, result entry) instead of a bare 201; serializer placement convention documented (role-based serializers live in their own file + spec — serialize-student/serialize-class; static shape serializers stay inline in the service).
+- **Logic hole #1 (real bug, fixed)**: any malformed UUID path parameter (e.g. GET /students/abc) made Prisma throw P2023 → **500 Internal Server Error** instead of 404, defeating the uniform-404 posture of plan 7.3. Verified empirically (P2023 on 'abc', 'not-a-uuid', '123'), fixed with a shared `src/common/parse-uuid.pipe.ts` (class-validator isUUID → 400 'Invalid id format') applied to ALL 18 UUID param sites across the 6 controllers; unit spec included. Well-formed foreign ids still answer the uniform 404.
+- **Business guards added** (all unit+e2e covered): PATCH /classes/:id rejects shrinking capacity below the current active enrollment count (409); POST /attendance-sessions rejects new sessions for PAUSED/ARCHIVED classes (409; record corrections on existing sessions stay possible); POST/PATCH /belt-exams reject targeting an INACTIVE belt rank (409).
+- **Endpoint coverage audit**: extracted all 61 OpenAPI operations and matched them against every HTTP call in test/e2e + test/security with a small AST-ish scanner (helpers resolved, query strings stripped). Initial truth: 17 operations had NO e2e call. Closed all of them.
+- **New `test/e2e/auth-coverage.e2e-spec.ts`** (7 tests): resend-verification (identical response for unknown email — anti-enumeration), audit-log (requires `AuditService.flush()` — batched async writes by design), single-session revocation (unknown id = uniform 401, deliberate), logout-all, mfa/methods + recovery-codes + totp/disable (disable must use a NEXT-step code — same-step codes trip the 120s replay guard; and disabling revokes all sessions, so re-login), reset-password via mailed token, DELETE /auth/me.
+- **Domain spec extensions**: classes-attendance (+class edit with shrink-guard 409, enrollment soft-leave lifecycle, schedule add/remove); belts-exams (+rank PATCH with 400 on malformed id, exam list browse); students-roles (+unlink rules: verified 409 / unverified 200 / repeat 404 — unverified links seeded directly since the API always verifies).
+- Result: **61/61 OpenAPI operations e2e-covered, 0 uncovered**; 44/44 e2e tests, 198/198 unit, all gates green.
+- **CI red on the PR (fixed)**: the contract-gate failed with "openapi.json is stale" — the records-upsert `@HttpCode(200)` consistency change landed AFTER the last `openapi:generate`, and @nestjs/swagger reflects the response status into the document. Refreshed the contract (only diff: records upsert 201→200), spectral 0 errors; CI on the refresh commit `3ed940a`: 13/13 success + deploy skipped (expected without cloud secrets). Lesson recorded: ANY response-status or route-shape change requires `npm run openapi:generate` in the same commit.
+- Swagger documentation (user question): YES — OpenAPI generated from the code (`npm run openapi:generate`, committed openapi.json, 50 paths / 61 operations); Swagger UI at `/docs` + raw document at `/docs-json`, both asserted by `test/e2e/swagger.e2e-spec.ts` (green); gated by `SWAGGER_ENABLED=true` and kept off in production per plan 9, with a dedicated CSP in bootstrap.ts; staleness + quality enforced by the contract-gate (regenerate-diff + spectral).
+- ACTION REQUIRED from owner: open PR `phase/3-belts-exams` → `main` (https://github.com/NguyenQuan121321/VovinamApiNode/compare/main...phase/3-belts-exams), let CI run, squash-merge when green, delete branch, pull main. Then P4 (billing payments) starts on `phase/4-billing`.
 
 ### 2026-09-06 — Session 13: P3 (belts & exams) implemented, gates green
 - Session start: PR #14 (P2 increment 2) confirmed MERGED (`5ff70ff`, CI 13/13 success + deploy skipped as expected); `phase/2-domain-core` deleted locally and remotely per protocol; `phase/3-belts-exams` branched from up-to-date main. Static gates on the fresh tree green before coding.

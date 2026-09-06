@@ -14,6 +14,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/guards/roles.decorator';
 import { CurrentUser } from '../auth/guards/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
+import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 import { ExamsService } from './exams.service';
 import {
   CreateBeltExamDto,
@@ -35,7 +36,7 @@ export class ExamsController {
   }
 
   @Get('belt-exams/:id')
-  getById(@Param('id') id: string) {
+  getById(@Param('id', ParseUuidPipe) id: string) {
     return this.exams.getById(id);
   }
 
@@ -47,7 +48,7 @@ export class ExamsController {
 
   @Patch('belt-exams/:id')
   @Roles('ADMIN')
-  update(@Param('id') id: string, @Body() dto: UpdateBeltExamDto) {
+  update(@Param('id', ParseUuidPipe) id: string, @Body() dto: UpdateBeltExamDto) {
     return this.exams.update(id, dto);
   }
 
@@ -56,7 +57,7 @@ export class ExamsController {
   @Roles('STUDENT', 'PARENT')
   register(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUuidPipe) id: string,
     @Body() dto: RegisterExamDto,
   ) {
     return this.exams.register(user, id, dto);
@@ -68,7 +69,7 @@ export class ExamsController {
   @HttpCode(200)
   recordResult(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUuidPipe) id: string,
     @Body() dto: ExamResultDto,
   ) {
     return this.exams.recordResult(user, id, dto);
