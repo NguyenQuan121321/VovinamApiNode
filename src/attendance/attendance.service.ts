@@ -45,6 +45,11 @@ export class AttendanceService {
     dto: CreateAttendanceSessionDto,
   ): Promise<Record<string, unknown>> {
     const cls = await this.classes.assertManageable(caller, dto.classId);
+    // No new lessons for paused or archived classes; correcting records of an
+    // existing session stays possible.
+    if (cls.status !== 'ACTIVE') {
+      throw new ConflictException('Class is not active');
+    }
     const sessionDate = new Date(dto.sessionDate);
     // An admin creating the session records the class's own instructor as the teacher.
     const instructorId = caller.role === 'INSTRUCTOR' ? caller.id : cls.instructorId;
