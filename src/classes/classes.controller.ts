@@ -13,6 +13,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/guards/roles.decorator';
+import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 import { ClassesService } from './classes.service';
 import {
   CreateClassDto,
@@ -33,7 +34,7 @@ export class ClassesController {
   }
 
   @Get(':id')
-  getById(@Param('id') id: string) {
+  getById(@Param('id', ParseUuidPipe) id: string) {
     return this.classes.getById(id);
   }
 
@@ -45,13 +46,13 @@ export class ClassesController {
 
   @Patch(':id')
   @Roles('ADMIN')
-  update(@Param('id') id: string, @Body() dto: UpdateClassDto) {
+  update(@Param('id', ParseUuidPipe) id: string, @Body() dto: UpdateClassDto) {
     return this.classes.update(id, dto);
   }
 
   @Post(':id/schedules')
   @Roles('ADMIN')
-  addSchedule(@Param('id') id: string, @Body() dto: CreateScheduleDto) {
+  addSchedule(@Param('id', ParseUuidPipe) id: string, @Body() dto: CreateScheduleDto) {
     return this.classes.addSchedule(id, dto);
   }
 
@@ -59,8 +60,8 @@ export class ClassesController {
   @Roles('ADMIN')
   @HttpCode(200)
   async removeSchedule(
-    @Param('id') id: string,
-    @Param('scheduleId') scheduleId: string,
+    @Param('id', ParseUuidPipe) id: string,
+    @Param('scheduleId', ParseUuidPipe) scheduleId: string,
   ): Promise<{ removed: boolean }> {
     return this.classes.removeSchedule(id, scheduleId);
   }

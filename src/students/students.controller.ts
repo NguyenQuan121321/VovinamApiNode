@@ -17,6 +17,7 @@ import { CurrentUser } from '../auth/guards/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import { StudentsService } from './students.service';
 import { CreateStudentDto, ListStudentsQueryDto, UpdateStudentDto } from './dto/students.dto';
+import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 
 @Controller('students')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -43,26 +44,26 @@ export class StudentsController {
   }
 
   @Get(':id')
-  getById(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  getById(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUuidPipe) id: string) {
     return this.students.getById(user, id);
   }
 
   @Patch(':id')
   @Roles('ADMIN')
-  update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {
+  update(@Param('id', ParseUuidPipe) id: string, @Body() dto: UpdateStudentDto) {
     return this.students.update(id, dto);
   }
 
   @Delete(':id')
   @Roles('ADMIN')
-  async softDelete(@Param('id') id: string): Promise<{ deleted: boolean }> {
+  async softDelete(@Param('id', ParseUuidPipe) id: string): Promise<{ deleted: boolean }> {
     return this.students.softDelete(id);
   }
 
   @Post(':id/invite-code')
   @Roles('ADMIN')
   @HttpCode(200)
-  regenerateInviteCode(@Param('id') id: string) {
+  regenerateInviteCode(@Param('id', ParseUuidPipe) id: string) {
     return this.students.regenerateInviteCode(id);
   }
 }

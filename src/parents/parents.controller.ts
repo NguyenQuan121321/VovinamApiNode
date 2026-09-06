@@ -6,6 +6,7 @@ import { CurrentUser } from '../auth/guards/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import { ParentsService } from './parents.service';
 import { LinkChildDto } from '../students/dto/students.dto';
+import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 
 @Controller('parents')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,7 +28,7 @@ export class ParentsController {
   @HttpCode(200)
   async unlink(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('studentId') studentId: string,
+    @Param('studentId', ParseUuidPipe) studentId: string,
   ): Promise<{ unlinked: boolean }> {
     return this.parents.unlink(user.id, studentId);
   }
