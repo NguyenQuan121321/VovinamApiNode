@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ClassesService } from './classes.service';
 import { AuditService } from '../auth/audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,6 +34,7 @@ function makePrismaMock() {
     },
     classSchedule: { create: jest.fn(), findFirst: jest.fn(), delete: jest.fn() },
     user: { findFirst: jest.fn() },
+    enrollment: { count: jest.fn() },
     $transaction: jest.fn(),
   };
 }
@@ -99,6 +100,21 @@ describe('ClassesService', () => {
     await expect(service.update('missing', { name: 'X' })).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('rejects shrinking the capacity below the active enrollment count', async () => {
+    prisma.class.findUnique.mockResolvedValue(cls);
+    prisma.enrollment.count.mockResolvedValue(12);
+    await expect(service.update('class-1', { capacity: 5 })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.class.update).not.toHaveBeenCalled();
+
+    prisma.enrollment.count.mockResolvedValue(5);
+    prisma.class.update.mockResolvedValue({ ...cls, capacity: 10 });
+    await expect(service.update('class-1', { capacity: 10 })).resolves.toMatchObject({
+      capacity: 10,
+    });
   });
 
   it('adds a schedule only with a sane time range', async () => {

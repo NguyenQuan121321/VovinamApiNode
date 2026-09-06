@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Class } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
@@ -81,6 +86,17 @@ export class ClassesService {
     await this.assertClassExists(classId);
     if (dto.instructorId !== undefined) {
       await this.assertInstructorUser(dto.instructorId);
+    }
+    if (dto.capacity !== undefined) {
+      // Keep the invariant the enrollment flow enforces: active enrollments <= capacity.
+      const active = await this.prisma.enrollment.count({
+        where: { classId, leftAt: null },
+      });
+      if (dto.capacity < active) {
+        throw new ConflictException(
+          'Capacity cannot be below the current number of active enrollments',
+        );
+      }
     }
     const updated = await this.prisma.class.update({ where: { id: classId }, data: dto });
     this.audit.record({ event: 'class_updated', success: true, detail: `class:${classId}` });
