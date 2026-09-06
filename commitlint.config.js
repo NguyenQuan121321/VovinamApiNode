@@ -20,6 +20,7 @@ module.exports = {
         'belts',
         'exams',
         'billing',
+        'payments',
         'notifications',
         'consent',
         'config',

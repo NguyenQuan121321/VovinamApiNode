@@ -29,6 +29,10 @@ export interface Env {
   PAYOS_CLIENT_ID?: string;
   PAYOS_API_KEY?: string;
   PAYOS_CHECKSUM_KEY?: string;
+  /** Which gateway adapter serves QR payments: payos | sepay | simulated. */
+  PAYMENTS_GATEWAY?: string;
+  /** HMAC-SHA256 secret verifying gateway webhooks (simulated adapter). */
+  PAYMENTS_WEBHOOK_SECRET?: string;
   ZALO_OA_ACCESS_TOKEN?: string;
   ZALO_OA_APP_ID?: string;
   ZALO_OA_SECRET_KEY?: string;
@@ -74,6 +78,8 @@ export const envSchema = Joi.object({
   PAYOS_CLIENT_ID: optionalString,
   PAYOS_API_KEY: optionalString,
   PAYOS_CHECKSUM_KEY: optionalString,
+  PAYMENTS_GATEWAY: Joi.string().valid('payos', 'sepay', 'simulated').default('simulated'),
+  PAYMENTS_WEBHOOK_SECRET: Joi.string().min(16).allow('').optional(),
   ZALO_OA_ACCESS_TOKEN: optionalString,
   ZALO_OA_APP_ID: optionalString,
   ZALO_OA_SECRET_KEY: optionalString,

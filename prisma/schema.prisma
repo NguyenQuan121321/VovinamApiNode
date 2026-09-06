@@ -96,6 +96,21 @@ enum InvoiceStatus {
   REFUNDED
 }
 
+enum PaymentGateway {
+  PAYOS
+  SEPAY
+  CASH
+  BANK_TRANSFER
+}
+
+enum PaymentTxnStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  DISPUTED
+}
+
 /// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
 /// never a hard DELETE, so every FK below uses onDelete: Restrict.
 model User {
@@ -118,15 +133,16 @@ model User {
   recoveryCodes      RecoveryCode[]
   usedTokens         UsedToken[]
   auditLogs          AuditLog[]
-  appSettingUpdates  AppSetting[]        @relation("AppSettingUpdatedBy")
+  appSettingUpdates  AppSetting[]         @relation("AppSettingUpdatedBy")
   studentProfile     StudentProfile?
-  parentLinks        ParentStudentLink[] @relation("ParentLink")
-  verifiedLinks      ParentStudentLink[] @relation("LinkVerifier")
-  taughtClasses      Class[]             @relation("ClassInstructor")
-  attendedSessions   AttendanceSession[] @relation("SessionInstructor")
-  recordedAttendance AttendanceRecord[]  @relation("AttendanceRecorder")
-  examinedResults    ExamRegistration[]  @relation("ExamExaminer")
-  createdInvoices    Invoice[]           @relation("InvoiceCreator")
+  parentLinks        ParentStudentLink[]  @relation("ParentLink")
+  verifiedLinks      ParentStudentLink[]  @relation("LinkVerifier")
+  taughtClasses      Class[]              @relation("ClassInstructor")
+  attendedSessions   AttendanceSession[]  @relation("SessionInstructor")
+  recordedAttendance AttendanceRecord[]   @relation("AttendanceRecorder")
+  examinedResults    ExamRegistration[]   @relation("ExamExaminer")
+  createdInvoices    Invoice[]            @relation("InvoiceCreator")
+  cashPayments       PaymentTransaction[] @relation("CashRecorder")
 
   @@map("users")
 }
@@ -482,8 +498,13 @@ model Invoice {
   createdAt             DateTime          @default(now()) @map("created_at")
   updatedAt             DateTime          @updatedAt @map("updated_at")
 
-  items InvoiceItem[]
+  items    InvoiceItem[]
+  payments PaymentTransaction[]
 
+  /// Monthly-tuition idempotency (plan 7.7): one TUITION invoice per student per
+  /// period. Period columns are NULL for EXAM_FEE/UNIFORM/OTHER invoices, and
+  /// Postgres unique constraints treat NULLs as distinct, so those stay unlimited.
+  @@unique([studentId, type, periodMonth, periodYear])
   @@index([studentId])
   @@index([status])
   @@map("invoices")
@@ -502,4 +523,33 @@ model InvoiceItem {
 
   @@index([invoiceId])
   @@map("invoice_items")
+}
+
+/// One payment attempt against an invoice (plan sections 6, 7.5). Success is
+/// only ever recorded from a verified gateway webhook or an explicit admin CASH
+/// confirmation; the invoice is PAID when the sum of SUCCESS transactions
+/// reaches its total. gateway_txn_id is the DB-layer idempotency guard (S-03).
+model PaymentTransaction {
+  id             String           @id @default(uuid()) @db.Uuid
+  invoiceId      String           @map("invoice_id") @db.Uuid
+  invoice        Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  /// "VV" + 8 unambiguous characters, embedded in the transfer content.
+  orderRef       String           @unique @map("order_ref") @db.VarChar(20)
+  gateway        PaymentGateway
+  gatewayTxnId   String?          @unique @map("gateway_txn_id") @db.VarChar(64)
+  amount         Int
+  status         PaymentTxnStatus @default(PENDING)
+  paidAt         DateTime?        @map("paid_at")
+  /// QR pending expires 30 minutes after creation (plan 7.5).
+  expiresAt      DateTime?        @map("expires_at")
+  /// Admin who confirmed a CASH payment.
+  recordedBy     String?          @map("recorded_by") @db.Uuid
+  recordedByUser User?            @relation("CashRecorder", fields: [recordedBy], references: [id])
+  note           String?          @db.VarChar(500)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("payment_transactions")
 }
