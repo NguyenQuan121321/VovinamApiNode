@@ -261,19 +261,31 @@ export class BillingService {
               enrolledAt: { lt: monthEnd },
               student: { deletedAt: null, status: 'ACTIVE' },
             },
-            select: { studentId: true, classId: true },
+            select: { studentId: true, classId: true, class: { select: { name: true } } },
           });
-    // A student may have left and rejoined within the period — one invoice per pair.
-    const pairs = new Map<string, string>();
+    // One TUITION invoice per STUDENT per period (plan 7.7 idempotency UQ), with
+    // one line item per class — a student in two classes pays both rates in a
+    // single invoice instead of losing the second to the unique constraint.
+    const byStudent = new Map<string, Array<{ classId: string; className: string }>>();
     for (const enrollment of enrollments) {
-      pairs.set(`${enrollment.studentId}:${enrollment.classId}`, enrollment.studentId);
+      const list = byStudent.get(enrollment.studentId) ?? [];
+      list.push({ classId: enrollment.classId, className: enrollment.class.name });
+      byStudent.set(enrollment.studentId, list);
     }
 
     let created = 0;
     let skippedExisting = 0;
-    for (const [pair, studentId] of pairs) {
-      const classId = pair.split(':')[1] ?? '';
-      const rate = rateByClass.get(classId) ?? 0;
+    for (const [studentId, classes] of byStudent) {
+      const items = classes.map((entry) => {
+        const rate = rateByClass.get(entry.classId) ?? 0;
+        return {
+          description: `Tuition ${dto.month}/${dto.year} — ${entry.className}`,
+          quantity: 1,
+          unitAmount: rate,
+          amount: rate,
+        };
+      });
+      const total = items.reduce((sum, item) => sum + item.amount, 0);
       try {
         await this.prisma.$transaction(async (tx) => {
           const invoice = await tx.invoice.create({
@@ -283,23 +295,17 @@ export class BillingService {
               type: 'TUITION',
               periodMonth: dto.month,
               periodYear: dto.year,
-              subtotal: rate,
+              subtotal: total,
               discount: 0,
-              total: rate,
+              total,
               status: 'UNPAID',
               dueDate,
               note: `Tuition ${dto.month}/${dto.year}`,
               createdBy: caller.id,
             },
           });
-          await tx.invoiceItem.create({
-            data: {
-              invoiceId: invoice.id,
-              description: `Tuition ${dto.month}/${dto.year}`,
-              quantity: 1,
-              unitAmount: rate,
-              amount: rate,
-            },
+          await tx.invoiceItem.createMany({
+            data: items.map((item) => ({ invoiceId: invoice.id, ...item })),
           });
         });
         created += 1;

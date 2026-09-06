@@ -248,13 +248,18 @@ describe('BillingService', () => {
 
   describe('generateMonthly (plan 7.7)', () => {
     const dto = { month: 10, year: 2026, classIds: ['class-1', 'class-2'] };
+    const enrollment = (studentId: string, classId: string, className: string) => ({
+      studentId,
+      classId,
+      class: { name: className },
+    });
 
-    it('creates one invoice per active enrollment at the configured rate', async () => {
+    it('creates one invoice per student with a line item per class', async () => {
       prisma.appSetting.findUnique.mockResolvedValue({
         key: 'tuition_rates',
         value: { 'class-1': 500000 },
       });
-      prisma.enrollment.findMany.mockResolvedValue([{ studentId: 'sp-1', classId: 'class-1' }]);
+      prisma.enrollment.findMany.mockResolvedValue([enrollment('sp-1', 'class-1', 'White Belt A')]);
       prisma.invoice.create.mockResolvedValue({ ...invoice });
 
       const result = await service.generateMonthly(admin, dto);
@@ -274,12 +279,42 @@ describe('BillingService', () => {
       );
     });
 
+    it('aggregates a multi-class student into ONE invoice whose items sum both rates', async () => {
+      prisma.appSetting.findUnique.mockResolvedValue({
+        key: 'tuition_rates',
+        value: { 'class-1': 500000, 'class-2': 400000 },
+      });
+      prisma.enrollment.findMany.mockResolvedValue([
+        enrollment('sp-1', 'class-1', 'White Belt A'),
+        enrollment('sp-1', 'class-2', 'White Belt B'),
+      ]);
+      prisma.invoice.create.mockResolvedValue({ ...invoice });
+
+      const result = await service.generateMonthly(admin, dto);
+      expect(result).toMatchObject({ created: 1, skippedExisting: 0 });
+      const data = prisma.invoice.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({ total: 900000 });
+      // createMany carries one item per class so no rate is lost to the UQ.
+      expect(prisma.invoiceItem.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            amount: 500000,
+            description: expect.stringContaining('White Belt A'),
+          }),
+          expect.objectContaining({
+            amount: 400000,
+            description: expect.stringContaining('White Belt B'),
+          }),
+        ],
+      });
+    });
+
     it('counts a duplicate period invoice as skipped instead of failing (idempotent)', async () => {
       prisma.appSetting.findUnique.mockResolvedValue({
         key: 'tuition_rates',
         value: { 'class-1': 500000 },
       });
-      prisma.enrollment.findMany.mockResolvedValue([{ studentId: 'sp-1', classId: 'class-1' }]);
+      prisma.enrollment.findMany.mockResolvedValue([enrollment('sp-1', 'class-1', 'White Belt A')]);
       prisma.invoice.create.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('duplicate', {
           code: 'P2002',

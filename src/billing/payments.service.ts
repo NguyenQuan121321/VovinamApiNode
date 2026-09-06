@@ -272,6 +272,13 @@ export class PaymentsService {
    * Marks the payment SUCCESS and the invoice PAID once SUCCESS transactions
    * cover the total (plan 7.5).
    */
+  /**
+   * Marks the payment SUCCESS and the invoice PAID once SUCCESS transactions
+   * cover the total (plan 7.5). A webhook arriving after the QR's 30-minute
+   * expiry still settles: the expiry governs how long the QR can be newly paid,
+   * while the gateway's report of a completed transfer is authoritative on the
+   * money actually received.
+   */
   private async settleInvoice(invoiceId: string, paymentId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await tx.paymentTransaction.update({
