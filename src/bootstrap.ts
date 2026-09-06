@@ -7,6 +7,7 @@ import type { Express } from 'express';
 import { AppModule } from './app.module';
 import { EnvService } from './config/env.service';
 import { PinoLoggerService } from './logging/pino-logger.service';
+import type { RequestWithRawBody } from './common/request-raw-body';
 
 /** Single source of the OpenAPI contract (used by bootstrap and scripts/generate-openapi.ts). */
 export function buildOpenApiDocumentConfig() {
@@ -43,7 +44,16 @@ export async function createApp() {
   // Trust the first proxy hop (Render/nginx) so client IPs for rate limiting are real.
   (app.getHttpAdapter().getInstance() as Express).set('trust proxy', 1);
 
-  app.use(json({ limit: '1mb' }));
+  // The verify callback captures the untouched raw bytes so gateway webhook
+  // signatures (plan 7.5) verify against exactly what the provider sent.
+  app.use(
+    json({
+      limit: '1mb',
+      verify: (req, _res, buf) => {
+        (req as RequestWithRawBody).rawBody = buf;
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '1mb' }));
   app.use(
     helmet({

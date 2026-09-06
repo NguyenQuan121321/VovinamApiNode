@@ -52,6 +52,27 @@ async function main(): Promise<void> {
   }
   console.info(`Seeded ${beltRanks.length} belt ranks`);
 
+  // Club configuration defaults (plan sections 6, 7.7, 10). Real values are set by
+  // the club master before go-live — the seed only guarantees the keys exist with
+  // safe shapes. Empty update: admin edits are never overwritten by a re-seed.
+  await prisma.appSetting.upsert({
+    where: { key: 'tuition_rates' },
+    // Per-class monthly VND rate; keyed by the classes.id UUID.
+    create: { key: 'tuition_rates', value: {} },
+    update: {},
+  });
+  await prisma.appSetting.upsert({
+    where: { key: 'bank_account' },
+    // The fee-collecting account MUST be in the legal entity's name (plan 10);
+    // the QR flow refuses to run until bin/number/name are filled in.
+    create: {
+      key: 'bank_account',
+      value: { owner_type: 'BUSINESS', bin: '', number: '', name: '' },
+    },
+    update: {},
+  });
+  console.info('Seeded app settings (tuition_rates, bank_account)');
+
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
   if (email === undefined || email === '' || password === undefined || password === '') {
