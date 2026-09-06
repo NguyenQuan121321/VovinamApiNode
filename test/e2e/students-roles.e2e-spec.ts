@@ -160,6 +160,24 @@ describe('Students roles and access (e2e)', () => {
     await get(`/api/v1/students/${studentProfileId}`, instructorToken).expect(404);
   });
 
+  it('unlinking follows the verified-link rules (plan 8)', async () => {
+    // The invite-code flow creates VERIFIED links; only the club can remove those.
+    await send('delete', `/api/v1/parents/links/${studentProfileId}`, {}, parentToken).expect(409);
+
+    // Unverified links never arise through the API, so seed one for parent B directly.
+    const parentB = await prisma.user.findUniqueOrThrow({ where: { email: users.parentB } });
+    await prisma.parentStudentLink.create({
+      data: {
+        parentUserId: parentB.id,
+        studentId: studentProfileId,
+        relationship: 'GUARDIAN',
+        verified: false,
+      },
+    });
+    await send('delete', `/api/v1/parents/links/${studentProfileId}`, {}, parentBToken).expect(200);
+    await send('delete', `/api/v1/parents/links/${studentProfileId}`, {}, parentBToken).expect(404);
+  });
+
   it('admin updates, soft-deletes, and the profile disappears for everyone', async () => {
     await send(
       'patch',

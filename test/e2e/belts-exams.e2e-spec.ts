@@ -132,6 +132,15 @@ describe('Belt ranks and exams (e2e)', () => {
       { code: 'X', name: 'Nope', rankGroup: 'LAM', orderIndex: rankBase + 3 },
       studentToken,
     ).expect(403);
+
+    // Admin edits a rank; a malformed id answers 400, never a 500 (P2023 leak).
+    await send(
+      'patch',
+      `/api/v1/belt-ranks/${rankLowId}`,
+      { name: 'Test White I' },
+      adminToken,
+    ).expect(200);
+    await send('patch', '/api/v1/belt-ranks/not-an-int', { name: 'X' }, adminToken).expect(400);
   });
 
   it('admin creates a student, links the parent, and opens an exam', async () => {
@@ -199,6 +208,11 @@ describe('Belt ranks and exams (e2e)', () => {
       200,
     );
 
+    // Members browse the exam list and detail (any authenticated role, plan 8).
+    const examList = await get('/api/v1/belt-exams', studentToken).expect(200);
+    expect((examList.body.data.items as Array<Record<string, unknown>>).map((e) => e.id)).toContain(
+      exam1Id,
+    );
     const detail = await get(`/api/v1/belt-exams/${exam1Id}`, studentToken).expect(200);
     expect(detail.body.data).toMatchObject({
       status: 'OPEN',
