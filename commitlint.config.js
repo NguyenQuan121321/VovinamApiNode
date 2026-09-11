@@ -12,6 +12,7 @@ module.exports = {
       2,
       'always',
       [
+        'agents',
         'auth',
         'students',
         'parents',
