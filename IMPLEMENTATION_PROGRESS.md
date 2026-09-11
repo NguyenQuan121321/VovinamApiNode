@@ -29,6 +29,12 @@ Current status: **P4 (billing & payments) implemented on `phase/4-billing`: invo
 
 ## Handoff log
 
+### 2026-09-11 — Session 16: audit gate red → multer override, CI migration assertion corrected
+- CI `audit (npm audit high)` went red: **multer 2.2.0** (transitive only, exact-pinned by `@nestjs/platform-express@11.2.3`; the app never imports multer) accumulated 4 HIGH advisories — GHSA-wc9g-mqfw-jrwm (<2.3.0), GHSA-qfvm-cv95-jqjf (=2.2.0), GHSA-qvfw-j98x-7q72 (<2.3.0), GHSA-535w-7cp7-47q4 (<2.3.0). The 5 audit findings are this one cascade (core/swagger/testing flagged only via platform-express).
+- Resolution: **npm override `"multer": "^2.3.0"`** in package.json — no Nest 11.x ships a patched multer (11.2.3 is the latest 11.x and pins 2.2.0; 2.3.0 fixes all four and is semver-compatible with the 2.x line platform-express uses). Lockfile diff is exactly the multer 2.2.0→2.3.0 bump; re-derived lockfiles keep 2.3.0 (override is authoritative in package.json). A Nest 12 major upgrade was deliberately NOT taken for this.
+- Also this session: migration-dry-run table assertion list was missing `payment_transactions` (count 22 was already correct) — fixed in e0aaf55.
+- Gate evidence on the dependency change: `npm ci` ✓ audit 0 findings ✓ lint ✓ format ✓ typecheck ✓ 239/239 unit ✓ build ✓ `npm ls` clean ✓ 50/50 e2e (billing spec 6/6: monthly idempotency, QR+webhook→PAID, S-03/S-11, CASH, refund+revenue) ✓.
+
 ### 2026-09-06 — Session 15: P4 (billing & payments) implemented, gates green
 - Session start: PR #16 (P3) confirmed MERGED (d3f430d, 13/13 CI); `phase/3-belts-exams` deleted per protocol; resumed an existing uncommitted `phase/4-billing` working set from an earlier session slice, reviewed it end-to-end before completing it (schema/migration, gateway port + simulated adapter, both services, controller wiring, raw-body capture, config).
 - Migration `20260906014813`: payment_transactions (order_ref UQ "VV"+8, gateway_txn_id UQ NULL — the DB-layer idempotency guard, FK invoice RESTRICT) + invoices UQ(student, type, period_month, period_year) for monthly-tuition idempotency (NULL periods never collide, so EXAM_FEE rows are unaffected). 22 tables; CI assertion 21→22.
