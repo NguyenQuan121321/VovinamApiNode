@@ -9,3 +9,10 @@ process.env.SWAGGER_ENABLED = 'true';
 process.env.METRICS_TOKEN ??= 'e2e-metrics-token-0123456789';
 process.env.JWT_SECRET ??= 'e2e-jwt-secret-0123456789abcdef0123456789abcdef';
 process.env.APP_ENCRYPTION_KEY ??= 'ab'.repeat(32);
+// Billing (P4): the simulated gateway signs webhooks with this shared secret so
+// tests can post fully verifiable webhook payloads without provider credentials.
+process.env.PAYMENTS_GATEWAY ??= 'simulated';
+process.env.PAYMENTS_WEBHOOK_SECRET ??= 'e2e-payments-webhook-secret-0123456789';
+// Suites fire hundreds of rapid same-IP requests; effectively disable the
+// global per-IP throttler (plan 4.1) here — its behavior is unit-tested.
+process.env.RATE_LIMIT_MAX_REQUESTS ??= '1000000';

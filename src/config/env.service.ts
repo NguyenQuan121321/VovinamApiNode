@@ -75,6 +75,16 @@ export class EnvService {
     return this.getOptional('METRICS_TOKEN');
   }
 
+  /** payos | sepay | simulated — QR payments are config-gated (plan stop rules). */
+  get paymentsGateway(): 'payos' | 'sepay' | 'simulated' {
+    // Joi validates the value; the assertion only narrows the string type.
+    return this.get('PAYMENTS_GATEWAY') as 'payos' | 'sepay' | 'simulated';
+  }
+
+  get paymentsWebhookSecret(): string | undefined {
+    return this.getOptional('PAYMENTS_WEBHOOK_SECRET');
+  }
+
   get isProduction(): boolean {
     return this.nodeEnv === 'production';
   }

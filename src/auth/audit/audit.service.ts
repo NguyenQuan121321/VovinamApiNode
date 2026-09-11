@@ -45,6 +45,14 @@ export const AUDIT_EVENTS = [
   'exam_registration_created',
   'exam_result_recorded',
   'invoice_issued',
+  'invoice_created',
+  'tuition_generated',
+  'payment_created',
+  'payment_succeeded',
+  'payment_failed',
+  'payment_confirmed_cash',
+  'payment_flagged',
+  'payment_refunded',
 ] as const;
 
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];

@@ -1,9 +1,12 @@
 import { MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppConfigModule } from './config/app-config.module';
+import { EnvService } from './config/env.service';
 import { validateEnv } from './config/env.validation';
 import { HttpExceptionFilter } from './common/http-exception.filter';
+import { IpThrottlerGuard } from './common/ip-throttler.guard';
 import { RequestIdMiddleware } from './common/request-id.middleware';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 import { ResponseInterceptor } from './common/response.interceptor';
@@ -27,6 +30,13 @@ import { ParentsModule } from './parents/parents.module';
     AppConfigModule,
     LoggingModule,
     SharedStoreModule,
+    // Per-IP rate limiting (plan 4.1): the guard buckets IPv6 by /64 (S-10).
+    ThrottlerModule.forRootAsync({
+      inject: [EnvService],
+      useFactory: (env: EnvService) => [
+        { ttl: env.rateLimitTtlSeconds * 1000, limit: env.rateLimitMaxRequests },
+      ],
+    }),
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -40,6 +50,7 @@ import { ParentsModule } from './parents/parents.module';
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
+    { provide: APP_GUARD, useClass: IpThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
   ],

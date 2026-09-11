@@ -166,12 +166,16 @@ export class AuthService {
       user.emailVerifiedAt === null
     ) {
       const token = this.tokens.signActionToken(user.id, 'VERIFY_EMAIL', VERIFY_EMAIL_TTL_SECONDS);
-      await this.notify(
-        user.email,
-        'VERIFY_EMAIL',
-        'Verify your email',
-        `Use this token to verify your email (valid 24 hours): ${token}`,
-      );
+      // Per-account mail budget (plan 4.1): beyond 5/hour the mail is silently
+      // skipped while the response stays uniform (anti-enumeration, plan 5.1).
+      if (this.store.increment(`mail:VERIFY_EMAIL:${user.id}`, 3_600_000) <= 5) {
+        await this.notify(
+          user.email,
+          'VERIFY_EMAIL',
+          'Verify your email',
+          `Use this token to verify your email (valid 24 hours): ${token}`,
+        );
+      }
       this.audit.record({ userId: user.id, event: 'email_verification_resent', success: true, ip });
     }
     return { sent: true };
@@ -185,12 +189,15 @@ export class AuthService {
         'RESET_PASSWORD',
         RESET_PASSWORD_TTL_SECONDS,
       );
-      await this.notify(
-        user.email,
-        'RESET_PASSWORD',
-        'Password recovery',
-        `Use this token to reset your password (valid 15 minutes): ${token}`,
-      );
+      // Same per-account mail budget as resend-verification (plan 4.1).
+      if (this.store.increment(`mail:RESET_PASSWORD:${user.id}`, 3_600_000) <= 5) {
+        await this.notify(
+          user.email,
+          'RESET_PASSWORD',
+          'Password recovery',
+          `Use this token to reset your password (valid 15 minutes): ${token}`,
+        );
+      }
       this.audit.record({ userId: user.id, event: 'password_reset_requested', success: true, ip });
     }
     return { sent: true };
