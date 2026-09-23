@@ -1,6 +1,7 @@
-// VovinamApiNode — schema: auth tables (plan section 5.2), app settings, belt ranks,
-// the domain core (students/parents/classes/enrollments/attendance), belts/exams with
-// the invoice chain, payments, and notifications/consent (plan sections 6, 8).
+// VovinamApiNode — authoritative schema (docs/DATABASE_BASELINE.md, TASK-02):
+// auth tables (plan section 5.2), app settings, belt ranks, the domain core
+// (students/parents/classes/enrollments/attendance), belts/exams with the invoice
+// chain, payments, notifications/consent, and club announcements (AD-07).
 // Financial tables use ON DELETE RESTRICT and are never hard-deleted; users and
 // student profiles are soft-delete only (plan 7.2) — no hard delete anywhere.
 
@@ -131,6 +132,11 @@ enum ConsentPurpose {
   MARKETING_NOTICE
 }
 
+enum AnnouncementAudience {
+  ALL
+  CLASS
+}
+
 /// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
 /// never a hard DELETE, so every FK below uses onDelete: Restrict.
 model User {
@@ -163,6 +169,7 @@ model User {
   examinedResults       ExamRegistration[]   @relation("ExamExaminer")
   createdInvoices       Invoice[]            @relation("InvoiceCreator")
   cashPayments          PaymentTransaction[] @relation("CashRecorder")
+  authoredAnnouncements Announcement[]       @relation("AnnouncementAuthor")
   notifications         Notification[]
   consents              ConsentLog[]
   consentActions        ConsentLog[]         @relation("ConsentActor")
@@ -359,6 +366,7 @@ model Class {
   schedules          ClassSchedule[]
   enrollments        Enrollment[]
   attendanceSessions AttendanceSession[]
+  announcements      Announcement[]
 
   @@index([instructorId])
   @@map("classes")
@@ -623,4 +631,29 @@ model ConsentLog {
 
   @@index([userId, purpose])
   @@map("consent_logs")
+}
+
+/// Club-activity announcement (plan section 6, AD-07): curated content authored
+/// by ADMIN for the whole club (ALL) or one class (CLASS). The announcement row
+/// IS the content; the notifications module stays a delivery channel and never
+/// absorbs this domain. audience=CLASS requires classId and audience=ALL forbids
+/// it — enforced in the service (not expressible as a Prisma constraint).
+model Announcement {
+  id            String               @id @default(uuid()) @db.Uuid
+  title         String               @db.VarChar(150)
+  body          String               @db.Text
+  audience      AnnouncementAudience
+  /// Target class for CLASS audience; NULL for ALL.
+  classId       String?              @map("class_id") @db.Uuid
+  class         Class?               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  /// Feed ordering stamp; set at creation (no draft state in the plan).
+  publishedAt   DateTime             @default(now()) @map("published_at")
+  createdBy     String               @map("created_by") @db.Uuid
+  createdByUser User                 @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: Restrict)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  @@index([classId])
+  @@index([publishedAt])
+  @@map("announcements")
 }
