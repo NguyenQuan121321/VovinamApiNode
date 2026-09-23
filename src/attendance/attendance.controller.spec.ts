@@ -40,8 +40,12 @@ describe('AttendanceController', () => {
   });
 
   it('delegates guarded student reads to the service', async () => {
-    await controller.history(user, 'sp-1', { from: '2026-01-01' });
-    expect(service.history).toHaveBeenCalledWith(user, 'sp-1', { from: '2026-01-01' });
+    await controller.history(user, 'sp-1', { from: '2026-01-01', page: 1, limit: 20 });
+    expect(service.history).toHaveBeenCalledWith(user, 'sp-1', {
+      from: '2026-01-01',
+      page: 1,
+      limit: 20,
+    });
 
     await controller.summary(user, { studentId: 'sp-1', month: '2026-01' });
     expect(service.summary).toHaveBeenCalledWith(user, { studentId: 'sp-1', month: '2026-01' });

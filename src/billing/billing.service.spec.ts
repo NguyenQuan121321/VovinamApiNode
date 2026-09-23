@@ -70,11 +70,16 @@ function makeService(prisma: PrismaMock) {
       : (arg as (tx: unknown) => unknown)(prisma),
   );
   const audit = { record: jest.fn() };
+  const outbox = {
+    enqueue: jest.fn().mockResolvedValue({ id: 'notif-email' }),
+    enqueueInApp: jest.fn().mockResolvedValue({ id: 'notif-inapp' }),
+  };
   const service = new BillingService(
     prisma as unknown as PrismaService,
     audit as unknown as AuditService,
+    outbox as never,
   );
-  return { service, auditRecord: audit.record as jest.Mock };
+  return { service, auditRecord: audit.record as jest.Mock, outbox };
 }
 
 describe('BillingService', () => {
@@ -243,6 +248,42 @@ describe('BillingService', () => {
     it('404s unknown students', async () => {
       prisma.studentProfile.findFirst.mockResolvedValue(null);
       await expect(service.create(admin, dto)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('writes outbox rows atomically for students with an account (plan 7.6)', async () => {
+      prisma.studentProfile.findFirst.mockResolvedValue({
+        id: 'sp-1',
+        status: 'ACTIVE',
+        user: { id: 'u-student', email: 'student@example.com' },
+      });
+      prisma.invoice.create.mockResolvedValue({ ...invoice, total: 250000 });
+      const { service: hooked, outbox } = makeService(prisma);
+      await hooked.create(admin, dto);
+      expect(outbox.enqueueInApp).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ userId: 'u-student', templateCode: 'invoice_issued' }),
+      );
+      expect(outbox.enqueue).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          userId: 'u-student',
+          channel: 'EMAIL',
+          payload: expect.objectContaining({ email: 'student@example.com' }),
+        }),
+      );
+    });
+
+    it('skips notifications for profiles without a user account (no-account minors)', async () => {
+      prisma.studentProfile.findFirst.mockResolvedValue({
+        id: 'sp-1',
+        status: 'ACTIVE',
+        user: null,
+      });
+      prisma.invoice.create.mockResolvedValue({ ...invoice, total: 250000 });
+      const { service: hooked, outbox } = makeService(prisma);
+      await hooked.create(admin, dto);
+      expect(outbox.enqueueInApp).not.toHaveBeenCalled();
+      expect(outbox.enqueue).not.toHaveBeenCalled();
     });
   });
 

@@ -140,20 +140,31 @@ export class AttendanceService {
     caller: AuthenticatedUser,
     studentId: string,
     query: AttendanceHistoryQueryDto,
-  ): Promise<{ items: Array<Record<string, unknown>>; total: number }> {
+  ): Promise<{
+    items: Array<Record<string, unknown>>;
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     await this.ownership.assertCanAccess(caller, studentId);
     const sessionDate: Prisma.DateTimeFilter = {
       ...(query.from === undefined ? {} : { gte: new Date(query.from) }),
       ...(query.to === undefined ? {} : { lte: new Date(query.to) }),
     };
-    const records = await this.prisma.attendanceRecord.findMany({
-      where: {
-        studentId,
-        ...(query.from === undefined && query.to === undefined ? {} : { session: { sessionDate } }),
-      },
-      include: { session: { include: { class: { select: { name: true } } } } },
-      orderBy: { session: { sessionDate: 'desc' } },
-    });
+    const where: Prisma.AttendanceRecordWhereInput = {
+      studentId,
+      ...(query.from === undefined && query.to === undefined ? {} : { session: { sessionDate } }),
+    };
+    const [records, total] = await this.prisma.$transaction([
+      this.prisma.attendanceRecord.findMany({
+        where,
+        include: { session: { include: { class: { select: { name: true } } } } },
+        orderBy: { session: { sessionDate: 'desc' } },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.attendanceRecord.count({ where }),
+    ]);
     return {
       items: records.map((record) => ({
         sessionId: record.attendanceSessionId,
@@ -163,7 +174,9 @@ export class AttendanceService {
         status: record.status,
         note: record.note,
       })),
-      total: records.length,
+      total,
+      page: query.page,
+      limit: query.limit,
     };
   }
 

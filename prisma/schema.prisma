@@ -1,9 +1,9 @@
-// VovinamApiNode — schema: auth tables (plan section 5.2), app settings, belt ranks,
-// the P2 domain core (students/parents/classes/enrollments/attendance), and the P3
-// exams/belts tables with the invoice chain the exam flow issues (plan sections 6, 8).
-// Remaining tables land with their phases: billing payments (P4), notifications (P5).
-// Financial tables will use ON DELETE RESTRICT; users rows are soft-delete only
-// (plan 7.2) — no hard delete anywhere.
+// VovinamApiNode — authoritative schema (docs/DATABASE_BASELINE.md, TASK-02):
+// auth tables (plan section 5.2), app settings, belt ranks, the domain core
+// (students/parents/classes/enrollments/attendance), belts/exams with the invoice
+// chain, payments, notifications/consent, and club announcements (AD-07).
+// Financial tables use ON DELETE RESTRICT and are never hard-deleted; users and
+// student profiles are soft-delete only (plan 7.2) — no hard delete anywhere.
 
 generator client {
   provider = "prisma-client-js"
@@ -111,6 +111,32 @@ enum PaymentTxnStatus {
   DISPUTED
 }
 
+enum NotificationChannel {
+  EMAIL
+  ZNS
+  SMS
+  INAPP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum ConsentPurpose {
+  DATA_PROCESSING
+  MEDIA_USAGE
+  MARKETING_NOTICE
+}
+
+enum AnnouncementAudience {
+  ALL
+  CLASS
+}
+
 /// Accounts for all four roles. Soft delete only (plan 7.2): deletedAt / isActive,
 /// never a hard DELETE, so every FK below uses onDelete: Restrict.
 model User {
@@ -127,22 +153,26 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  sessions           Session[]
-  refreshTokens      RefreshToken[]
-  totpCredential     TotpCredential?
-  recoveryCodes      RecoveryCode[]
-  usedTokens         UsedToken[]
-  auditLogs          AuditLog[]
-  appSettingUpdates  AppSetting[]         @relation("AppSettingUpdatedBy")
-  studentProfile     StudentProfile?
-  parentLinks        ParentStudentLink[]  @relation("ParentLink")
-  verifiedLinks      ParentStudentLink[]  @relation("LinkVerifier")
-  taughtClasses      Class[]              @relation("ClassInstructor")
-  attendedSessions   AttendanceSession[]  @relation("SessionInstructor")
-  recordedAttendance AttendanceRecord[]   @relation("AttendanceRecorder")
-  examinedResults    ExamRegistration[]   @relation("ExamExaminer")
-  createdInvoices    Invoice[]            @relation("InvoiceCreator")
-  cashPayments       PaymentTransaction[] @relation("CashRecorder")
+  sessions              Session[]
+  refreshTokens         RefreshToken[]
+  totpCredential        TotpCredential?
+  recoveryCodes         RecoveryCode[]
+  usedTokens            UsedToken[]
+  auditLogs             AuditLog[]
+  appSettingUpdates     AppSetting[]         @relation("AppSettingUpdatedBy")
+  studentProfile        StudentProfile?
+  parentLinks           ParentStudentLink[]  @relation("ParentLink")
+  verifiedLinks         ParentStudentLink[]  @relation("LinkVerifier")
+  taughtClasses         Class[]              @relation("ClassInstructor")
+  attendedSessions      AttendanceSession[]  @relation("SessionInstructor")
+  recordedAttendance    AttendanceRecord[]   @relation("AttendanceRecorder")
+  examinedResults       ExamRegistration[]   @relation("ExamExaminer")
+  createdInvoices       Invoice[]            @relation("InvoiceCreator")
+  cashPayments          PaymentTransaction[] @relation("CashRecorder")
+  authoredAnnouncements Announcement[]       @relation("AnnouncementAuthor")
+  notifications         Notification[]
+  consents              ConsentLog[]
+  consentActions        ConsentLog[]         @relation("ConsentActor")
 
   @@map("users")
 }
@@ -336,6 +366,7 @@ model Class {
   schedules          ClassSchedule[]
   enrollments        Enrollment[]
   attendanceSessions AttendanceSession[]
+  announcements      Announcement[]
 
   @@index([instructorId])
   @@map("classes")
@@ -552,4 +583,77 @@ model PaymentTransaction {
   @@index([invoiceId])
   @@index([status])
   @@map("payment_transactions")
+}
+
+/// One outbound message on the notification outbox (plan 7.6). Business state
+/// changes and their outbox rows commit in ONE transaction; the in-process
+/// worker then delivers with retry/backoff. INAPP rows are delivered to the
+/// feed at insert (status SENT, readAt set when read). user_id is SET NULL so
+/// delivery history survives account deletion without blocking it.
+model Notification {
+  id            String              @id @default(uuid()) @db.Uuid
+  userId        String?             @map("user_id") @db.Uuid
+  user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  channel       NotificationChannel
+  templateCode  String              @map("template_code") @db.VarChar(50)
+  /// Minimal per-template data (plan 7.6: minimum data, no sensitive payloads).
+  payload       Json
+  status        NotificationStatus  @default(QUEUED)
+  /// Delivery attempts across the fallback chain; capped by the worker.
+  retries       Int                 @default(0)
+  /// NULL = immediately eligible; the backoff sets this on transient failure.
+  nextAttemptAt DateTime?           @map("next_attempt_at")
+  error         String?             @db.VarChar(500)
+  readAt        DateTime?           @map("read_at")
+  sentAt        DateTime?           @map("sent_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@map("notifications")
+}
+
+/// Purpose-specific consent record (plan section 6, Decree 13). Append-only:
+/// each grant is a new row; revocation stamps revokedAt on the active row, and
+/// a later re-grant adds another row — history is never erased. The subject is
+/// the account holder (user_id); a verified parent consenting for a linked
+/// minor is recorded in consented_by_user_id (plan 7.1).
+model ConsentLog {
+  id                String         @id @default(uuid()) @db.Uuid
+  userId            String         @map("user_id") @db.Uuid
+  user              User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  purpose           ConsentPurpose
+  /// NULL when the subject consented for themselves; the acting PARENT for minors.
+  consentedByUserId String?        @map("consented_by_user_id") @db.Uuid
+  consentedByUser   User?          @relation("ConsentActor", fields: [consentedByUserId], references: [id], onDelete: Restrict)
+  consentedAt       DateTime       @default(now()) @map("consented_at")
+  revokedAt         DateTime?      @map("revoked_at")
+
+  @@index([userId, purpose])
+  @@map("consent_logs")
+}
+
+/// Club-activity announcement (plan section 6, AD-07): curated content authored
+/// by ADMIN for the whole club (ALL) or one class (CLASS). The announcement row
+/// IS the content; the notifications module stays a delivery channel and never
+/// absorbs this domain. audience=CLASS requires classId and audience=ALL forbids
+/// it — enforced in the service (not expressible as a Prisma constraint).
+model Announcement {
+  id            String               @id @default(uuid()) @db.Uuid
+  title         String               @db.VarChar(150)
+  body          String               @db.Text
+  audience      AnnouncementAudience
+  /// Target class for CLASS audience; NULL for ALL.
+  classId       String?              @map("class_id") @db.Uuid
+  class         Class?               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  /// Feed ordering stamp; set at creation (no draft state in the plan).
+  publishedAt   DateTime             @default(now()) @map("published_at")
+  createdBy     String               @map("created_by") @db.Uuid
+  createdByUser User                 @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: Restrict)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  @@index([classId])
+  @@index([publishedAt])
+  @@map("announcements")
 }

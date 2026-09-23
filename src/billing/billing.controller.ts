@@ -73,9 +73,14 @@ export class BillingController {
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
-  /** Payer initiates a QR payment; ownership guard scopes the invoice (plan 7.3). */
+  /**
+   * Payer initiates a QR payment; ownership guard scopes the invoice (plan 7.3).
+   * Instructors are excluded from the money domain entirely (AD-06): they run
+   * training, not payments, mirroring their exclusion from invoice reads.
+   */
   @Post('payments/qr/:invoiceId')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'STUDENT', 'PARENT')
   createQrPayment(
     @CurrentUser() user: AuthenticatedUser,
     @Param('invoiceId', ParseUuidPipe) invoiceId: string,

@@ -53,6 +53,11 @@ export const AUDIT_EVENTS = [
   'payment_confirmed_cash',
   'payment_flagged',
   'payment_refunded',
+  'consent_granted',
+  'consent_revoked',
+  'announcement_created',
+  'announcement_updated',
+  'announcement_deleted',
 ] as const;
 
 export type AuditEvent = (typeof AUDIT_EVENTS)[number];

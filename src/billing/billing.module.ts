@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { StudentsModule } from '../students/students.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { EnvService } from '../config/env.service';
 import { BillingController, PaymentsController } from './billing.controller';
 import { BillingService } from './billing.service';
@@ -15,7 +16,7 @@ import { SimulatedGateway } from './simulated.gateway';
  * land together with their real credentials (fail-fast boot until then).
  */
 @Module({
-  imports: [AuthModule, StudentsModule],
+  imports: [AuthModule, StudentsModule, NotificationsModule],
   controllers: [BillingController, PaymentsController],
   providers: [
     BillingService,
