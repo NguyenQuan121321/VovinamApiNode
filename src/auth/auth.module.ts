@@ -26,6 +26,14 @@ import { UsedTokenPurgeJob } from './used-token.purge';
     RolesGuard,
     { provide: MAIL_PORT, useClass: LoggingMailSender },
   ],
-  exports: [TokenService, RefreshTokenService, AuditService, JwtAuthGuard, RolesGuard],
+  exports: [
+    TokenService,
+    RefreshTokenService,
+    AuditService,
+    JwtAuthGuard,
+    RolesGuard,
+    // The notifications outbox delivers EMAIL through the same mail boundary.
+    MAIL_PORT,
+  ],
 })
 export class AuthModule {}

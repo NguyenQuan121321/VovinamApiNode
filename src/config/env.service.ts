@@ -85,6 +85,24 @@ export class EnvService {
     return this.getOptional('PAYMENTS_WEBHOOK_SECRET');
   }
 
+  /** Zalo OA credentials present (plan 7.6): the ZNS sender is considered configured. */
+  get znsConfigured(): boolean {
+    return (
+      this.getOptional('ZALO_OA_ACCESS_TOKEN') !== undefined &&
+      this.getOptional('ZALO_OA_APP_ID') !== undefined &&
+      this.getOptional('ZALO_OA_SECRET_KEY') !== undefined
+    );
+  }
+
+  /** eSMS credentials present (plan 7.6): the SMS fallback sender is considered configured. */
+  get smsConfigured(): boolean {
+    return (
+      this.getOptional('ESMS_API_KEY') !== undefined &&
+      this.getOptional('ESMS_SECRET_KEY') !== undefined &&
+      this.getOptional('ESMS_BRANDNAME') !== undefined
+    );
+  }
+
   get isProduction(): boolean {
     return this.nodeEnv === 'production';
   }

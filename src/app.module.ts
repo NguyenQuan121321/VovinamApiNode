@@ -23,6 +23,8 @@ import { BeltsModule } from './belts/belts.module';
 import { ExamsModule } from './exams/exams.module';
 import { StudentsModule } from './students/students.module';
 import { ParentsModule } from './parents/parents.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ConsentModule } from './consent/consent.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { ParentsModule } from './parents/parents.module';
     ExamsModule,
     StudentsModule,
     ParentsModule,
+    NotificationsModule,
+    ConsentModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Invoice, InvoiceItem, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
+import { NotificationOutboxService } from '../notifications/notification-outbox.service';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import type { CreateInvoiceDto, GenerateMonthlyDto, ListInvoicesQueryDto } from './dto/billing.dto';
 
@@ -26,6 +27,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly outbox: NotificationOutboxService,
   ) {}
 
   /**
@@ -170,7 +172,8 @@ export class BillingService {
   async create(caller: AuthenticatedUser, dto: CreateInvoiceDto): Promise<Record<string, unknown>> {
     const profile = await this.prisma.studentProfile.findFirst({
       where: { id: dto.studentId, deletedAt: null },
-      select: { id: true, status: true },
+      // The user relation is needed to notify the student (plan 7.6 outbox hook).
+      select: { id: true, status: true, user: { select: { id: true, email: true } } },
     });
     if (profile === null) {
       throw new NotFoundException('Not found');
@@ -214,6 +217,22 @@ export class BillingService {
           amount: item.quantity * item.unitAmount,
         })),
       });
+      // Outbox rows commit with the invoice in ONE transaction (plan 7.6): the
+      // notification exists exactly when the invoice exists, never before or after.
+      if (profile.user) {
+        const summary = `Invoice ${invoice.invoiceNo} (${dto.type}) issued — total ${invoice.total} VND, due ${dueDate.toISOString().slice(0, 10)}`;
+        await this.outbox.enqueueInApp(tx, {
+          userId: profile.user.id,
+          templateCode: 'invoice_issued',
+          payload: { message: summary },
+        });
+        await this.outbox.enqueue(tx, {
+          userId: profile.user.id,
+          channel: 'EMAIL',
+          templateCode: 'invoice_issued',
+          payload: { message: summary, email: profile.user.email },
+        });
+      }
       return invoice;
     });
     this.audit.record({
