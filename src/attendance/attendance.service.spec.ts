@@ -50,7 +50,7 @@ const record = {
 function makePrismaMock() {
   return {
     attendanceSession: { create: jest.fn(), findUnique: jest.fn() },
-    attendanceRecord: { upsert: jest.fn(), findMany: jest.fn() },
+    attendanceRecord: { upsert: jest.fn(), findMany: jest.fn(), count: jest.fn() },
     enrollment: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -197,9 +197,10 @@ describe('AttendanceService', () => {
           },
         },
       ]);
-      const result = await service.history(admin, 'sp-1', {});
+      prisma.attendanceRecord.count.mockResolvedValue(1);
+      const result = await service.history(admin, 'sp-1', { page: 1, limit: 20 });
       expect(ownership.assertCanAccess).toHaveBeenCalledWith(admin, 'sp-1');
-      expect(result).toMatchObject({ total: 1 });
+      expect(result).toMatchObject({ total: 1, page: 1, limit: 20 });
       expect(result.items[0]).toMatchObject({ className: 'White Belt A', status: 'PRESENT' });
     });
 

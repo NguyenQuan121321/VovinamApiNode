@@ -263,6 +263,18 @@ describe('Billing: invoices and payments (e2e)', () => {
     await get(`/api/v1/invoices/${tuitionInvoiceId}`, parentBToken).expect(404);
   });
 
+  it('excludes instructors from QR payment initiation (AD-06): zero financial surface', async () => {
+    await send('post', `/api/v1/payments/qr/${tuitionInvoiceId}`, {}, instructorToken).expect(403);
+    // The same invoice is still payable by the student (ownership guard unchanged).
+    const qr = await send(
+      'post',
+      `/api/v1/payments/qr/${tuitionInvoiceId}`,
+      {},
+      studentToken,
+    ).expect(201);
+    expect(qr.body.data.orderRef).toMatch(/^VV[A-Z2-9]{8}$/);
+  });
+
   it('QR + verified webhook marks the invoice PAID; bad signature and wrong amount never do (S-11)', async () => {
     const qr = await qrRequest(tuitionInvoiceId);
     expect(qr.amount).toBe(500000);
@@ -339,6 +351,13 @@ describe('Billing: invoices and payments (e2e)', () => {
     await expect(successCount(uniformInvoice2)).resolves.toBe(1);
     const paid = await get(`/api/v1/invoices/${uniformInvoice2}`, adminToken).expect(200);
     expect(paid.body.data.status).toBe('PAID');
+  });
+
+  it('answers 200 (no-op) on a signed but malformed webhook payload (DD-04)', async () => {
+    // Signature valid, structure unreadable: the gateway must stop retrying, so
+    // only a bad signature may answer 401 (plan 7.5 "always 200 otherwise").
+    const res = await webhook({ eventType: 'unknown.schema', data: { nested: true } }).expect(200);
+    expect(res.body.data.processed).toBe(false);
   });
 
   it('CASH confirmation is admin-only and idempotent (plan 7.5)', async () => {

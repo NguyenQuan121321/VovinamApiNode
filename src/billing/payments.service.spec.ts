@@ -240,11 +240,13 @@ describe('PaymentsService (plan 7.5, S-03, S-11)', () => {
       expect(prisma.invoice.update).not.toHaveBeenCalled();
     });
 
-    it('answers 401 for a well-signed but malformed payload', async () => {
+    it('answers 200 without side effects for a well-signed but malformed payload (DD-04)', async () => {
       gateway.parseEvent.mockReturnValue(null);
-      await expect(service.handleWebhook('simulated', headers, 'not json')).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
+      await expect(service.handleWebhook('simulated', headers, 'not json')).resolves.toEqual({
+        processed: false,
+      });
+      expect(prisma.paymentTransaction.updateMany).not.toHaveBeenCalled();
+      expect(prisma.invoice.update).not.toHaveBeenCalled();
     });
 
     it('answers 200 without side effects when a concurrent delivery wins the settle (S-03 race)', async () => {

@@ -31,6 +31,7 @@ import {
 } from './dto/account.dto';
 import { MfaLoginVerifyDto, TotpCodeDto, TotpDisableDto } from './dto/mfa.dto';
 import { PageDto } from '../common/pagination.dto';
+import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 
 @Controller('auth')
 export class AuthController {
@@ -108,7 +109,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async revokeSession(
     @CurrentUser() user: { id: string },
-    @Param('id') sessionId: string,
+    @Param('id', ParseUuidPipe) sessionId: string,
     @Req() req: Request,
   ): Promise<{ revoked: boolean }> {
     await this.auth.revokeSession(user.id, sessionId, req.ip);

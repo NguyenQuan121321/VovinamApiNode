@@ -11,6 +11,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { PageDto } from '../../common/pagination.dto';
 
 export class CreateAttendanceSessionDto {
   @IsUUID()
@@ -47,7 +48,8 @@ export class BulkAttendanceRecordsDto {
   records!: BulkAttendanceRecordDto[];
 }
 
-export class AttendanceHistoryQueryDto {
+/** Paginated like every other list (plan 9): a student's history can span years. */
+export class AttendanceHistoryQueryDto extends PageDto {
   @IsOptional()
   @IsDateString()
   from?: string;

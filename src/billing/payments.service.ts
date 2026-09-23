@@ -110,7 +110,9 @@ export class PaymentsService {
     }
     const event = this.gateway.parseEvent(rawBody);
     if (event === null) {
-      throw new UnauthorizedException('Malformed webhook payload');
+      // Signed but unreadable: nothing to process. Still 200 so the gateway
+      // stops retrying garbage events; only a bad signature answers 401 (DD-04).
+      return { processed: false };
     }
     const txn = await this.prisma.paymentTransaction.findUnique({
       where: { orderRef: event.orderRef },
