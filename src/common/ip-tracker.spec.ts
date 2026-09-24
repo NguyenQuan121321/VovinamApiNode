@@ -1,4 +1,4 @@
-import { trackerForIp } from './ip-tracker';
+import { trackerForIp, trackerFromRequest } from './ip-tracker';
 
 describe('trackerForIp (plan 4.1, S-10 semantics)', () => {
   it('keeps IPv4 trackers exact', () => {
@@ -23,5 +23,23 @@ describe('trackerForIp (plan 4.1, S-10 semantics)', () => {
 
   it('strips zone indices', () => {
     expect(trackerForIp('fe80::1%eth0')).toBe('v6-fe80:0000:0000:0000');
+  });
+});
+
+describe('trackerFromRequest (audit I-4/P2-7: proxy-resolved client address)', () => {
+  it('uses request.ip, not the client-controllable ips[0]', () => {
+    // Behind an edge that APPENDS to X-Forwarded-For, a spoofed prefix lands in
+    // request.ips[0]; request.ip is the edge-appended real client address.
+    const req = { ip: '198.51.100.7', ips: ['1.2.3.4', '198.51.100.7'] };
+    expect(trackerFromRequest(req)).toBe('198.51.100.7');
+  });
+
+  it('still applies IPv6 /64 bucketing to the resolved address', () => {
+    expect(trackerFromRequest({ ip: '2001:db8:1234:5678::dead' })).toBe('v6-2001:0db8:1234:5678');
+  });
+
+  it('falls back to the unknown bucket when no address resolved', () => {
+    expect(trackerFromRequest({})).toBe('unknown');
+    expect(trackerFromRequest({ ip: undefined })).toBe('unknown');
   });
 });
