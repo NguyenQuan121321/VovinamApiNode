@@ -21,6 +21,8 @@ export interface Env {
   CORS_ALLOWED_ORIGINS: string[];
   SWAGGER_ENABLED: boolean;
   METRICS_TOKEN?: string;
+  /** logging (default) keeps outbound mail in the pino log; smtp delivers via nodemailer. */
+  MAIL_DRIVER: 'logging' | 'smtp';
   SMTP_HOST?: string;
   SMTP_PORT: number;
   SMTP_USER?: string;
@@ -29,6 +31,9 @@ export interface Env {
   PAYOS_CLIENT_ID?: string;
   PAYOS_API_KEY?: string;
   PAYOS_CHECKSUM_KEY?: string;
+  /** Frontend redirects after the payOS checkout succeeds or is cancelled. */
+  PAYOS_RETURN_URL?: string;
+  PAYOS_CANCEL_URL?: string;
   /** Which gateway adapter serves QR payments: payos | sepay | simulated. */
   PAYMENTS_GATEWAY?: string;
   /** HMAC-SHA256 secret verifying gateway webhooks (simulated adapter). */
@@ -70,14 +75,45 @@ export const envSchema = Joi.object({
   METRICS_TOKEN: Joi.string()
     .min(16)
     .when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: optionalString }),
-  SMTP_HOST: optionalString,
+  MAIL_DRIVER: Joi.string().valid('logging', 'smtp').default('logging'),
+  SMTP_HOST: Joi.string().when('MAIL_DRIVER', {
+    is: 'smtp',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
   SMTP_PORT: Joi.number().integer().port().default(587),
   SMTP_USER: optionalString,
   SMTP_PASSWORD: optionalString,
-  SMTP_FROM: optionalString,
-  PAYOS_CLIENT_ID: optionalString,
-  PAYOS_API_KEY: optionalString,
-  PAYOS_CHECKSUM_KEY: optionalString,
+  SMTP_FROM: Joi.string().when('MAIL_DRIVER', {
+    is: 'smtp',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
+  PAYOS_CLIENT_ID: Joi.string().when('PAYMENTS_GATEWAY', {
+    is: 'payos',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
+  PAYOS_API_KEY: Joi.string().when('PAYMENTS_GATEWAY', {
+    is: 'payos',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
+  PAYOS_CHECKSUM_KEY: Joi.string().when('PAYMENTS_GATEWAY', {
+    is: 'payos',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
+  PAYOS_RETURN_URL: Joi.string().uri().when('PAYMENTS_GATEWAY', {
+    is: 'payos',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
+  PAYOS_CANCEL_URL: Joi.string().uri().when('PAYMENTS_GATEWAY', {
+    is: 'payos',
+    then: Joi.required(),
+    otherwise: optionalString,
+  }),
   PAYMENTS_GATEWAY: Joi.string().valid('payos', 'sepay', 'simulated').default('simulated'),
   PAYMENTS_WEBHOOK_SECRET: Joi.string().min(16).allow('').optional(),
   ZALO_OA_ACCESS_TOKEN: optionalString,
