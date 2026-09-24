@@ -46,6 +46,7 @@ const createdRegistration = {
 
 function makePrismaMock() {
   return {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     beltExam: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -55,7 +56,7 @@ function makePrismaMock() {
       count: jest.fn(),
     },
     beltRank: { findUnique: jest.fn(), findMany: jest.fn() },
-    studentProfile: { findFirst: jest.fn(), update: jest.fn() },
+    studentProfile: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     examRegistration: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -149,6 +150,18 @@ describe('ExamsService', () => {
       );
     });
 
+    it('locks the exam row before the capacity check (DB baseline §12 race fix)', async () => {
+      await service.register(studentCaller, 'exam-1', { studentId: 'sp-1' });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      const sql = (prisma.$queryRaw.mock.calls[0]?.[0] as string[]).join('');
+      expect(sql).toContain('FROM "belt_exams"');
+      expect(sql).toContain('FOR UPDATE');
+      // The lock precedes the capacity count that serialization guarantees.
+      expect(Math.min(...prisma.$queryRaw.mock.invocationCallOrder)).toBeLessThan(
+        Math.min(...prisma.examRegistration.count.mock.invocationCallOrder),
+      );
+    });
+
     it('answers a uniform 404 when the caller cannot access the student (S-01)', async () => {
       ownership.assertCanAccess.mockRejectedValue(new NotFoundException('Not found'));
       await expect(
@@ -217,6 +230,7 @@ describe('ExamsService', () => {
 
     it('promotes the student rank on PASS and audits the outcome', async () => {
       prisma.examRegistration.findUnique.mockResolvedValue(registration);
+      prisma.studentProfile.findUnique.mockResolvedValue({ currentBeltRankId: null });
       prisma.examRegistration.update.mockResolvedValue({ ...registration, status: 'RESULT_PASS' });
       const result = await service.recordResult(instructorCaller, 'reg-1', {
         status: 'RESULT_PASS',
@@ -236,6 +250,35 @@ describe('ExamsService', () => {
       expect(auditRecord).toHaveBeenCalledWith(
         expect.objectContaining({ event: 'exam_result_recorded', success: true }),
       );
+    });
+
+    it('promotes when the student holds a lower rank at result time', async () => {
+      prisma.examRegistration.findUnique.mockResolvedValue(registration);
+      prisma.studentProfile.findUnique.mockResolvedValue({ currentBeltRankId: 3 });
+      prisma.beltRank.findMany.mockResolvedValue([
+        { id: 3, orderIndex: 7 },
+        { id: 4, orderIndex: 10 },
+      ]);
+      prisma.examRegistration.update.mockResolvedValue({ ...registration, status: 'RESULT_PASS' });
+      await service.recordResult(instructorCaller, 'reg-1', { status: 'RESULT_PASS' });
+      expect(prisma.studentProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { currentBeltRankId: 4 } }),
+      );
+    });
+
+    it('refuses a stale PASS that would downgrade the rank (G-2, DB baseline §12)', async () => {
+      // The student was promoted by another exam after this registration was
+      // created; recording its PASS must not move the belt down.
+      prisma.examRegistration.findUnique.mockResolvedValue(registration);
+      prisma.studentProfile.findUnique.mockResolvedValue({ currentBeltRankId: 6 });
+      prisma.beltRank.findMany.mockResolvedValue([
+        { id: 6, orderIndex: 16 },
+        { id: 4, orderIndex: 10 },
+      ]);
+      await expect(
+        service.recordResult(instructorCaller, 'reg-1', { status: 'RESULT_PASS' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.studentProfile.update).not.toHaveBeenCalled();
     });
 
     it('does not touch the rank on FAIL', async () => {

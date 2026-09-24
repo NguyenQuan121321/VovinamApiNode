@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
 import { serializeStudent } from '../students/serialize-student';
@@ -41,21 +42,19 @@ export class ParentsService {
     if (duplicate !== null) {
       throw new ConflictException('Already linked');
     }
-    // The code is single-use: rotating it after use prevents reuse by anyone else.
-    await this.prisma.$transaction([
-      this.prisma.parentStudentLink.create({
+    // The code is single-use: the link is created only after the code was
+    // claimed by rotating it away in the same transaction.
+    await this.prisma.$transaction(async (tx) => {
+      await this.claimRotation(tx, profile.id, dto.inviteCode);
+      await tx.parentStudentLink.create({
         data: {
           parentUserId,
           studentId: profile.id,
           relationship: 'PARENT',
           verified: true,
         },
-      }),
-      this.prisma.studentProfile.update({
-        where: { id: profile.id },
-        data: { inviteCode: await this.rotateCode(profile.inviteCode) },
-      }),
-    ]);
+      });
+    });
     this.audit.record({
       event: 'parent_link_created',
       success: true,
@@ -95,18 +94,40 @@ export class ParentsService {
     return { unlinked: true };
   }
 
-  /** Best-effort rotation so a consumed code cannot be reused by another parent. */
-  private async rotateCode(current: string): Promise<string> {
+  /**
+   * Single-use claim (DB baseline §12): the rotation is a conditional update
+   * matching only the code being consumed, so of two parents racing the same
+   * code exactly one wins and the loser sees count 0 — uniform 404, mirroring
+   * the already-rotated-code posture. A P2002 means the fresh code collided
+   * with another profile and is retried; after 5 collisions the link is
+   * refused explicitly — the consumed code is never left reusable (P3-5).
+   */
+  private async claimRotation(
+    tx: Prisma.TransactionClient,
+    profileId: string,
+    consumedCode: string,
+  ): Promise<void> {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const code = generateCode();
-      if (code === current) {
+      if (code === consumedCode) {
         continue;
       }
-      const clash = await this.prisma.studentProfile.findUnique({ where: { inviteCode: code } });
-      if (clash === null) {
-        return code;
+      try {
+        const claimed = await tx.studentProfile.updateMany({
+          where: { id: profileId, inviteCode: consumedCode },
+          data: { inviteCode: code },
+        });
+        if (claimed.count === 1) {
+          return;
+        }
+        throw new NotFoundException('Not found');
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          continue;
+        }
+        throw error;
       }
     }
-    return current;
+    throw new ConflictException('Could not rotate the invite code');
   }
 }

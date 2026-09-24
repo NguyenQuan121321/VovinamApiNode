@@ -26,6 +26,10 @@ export class EnrollmentsService {
 
   async create(dto: CreateEnrollmentDto): Promise<Record<string, unknown>> {
     const created = await this.prisma.$transaction(async (tx) => {
+      // DB baseline §12: serialize concurrent enrollment mutations per class —
+      // the capacity check below is check-then-act under READ COMMITTED, so
+      // without this row lock two creates can both pass and overbook.
+      await tx.$queryRaw`SELECT id FROM "classes" WHERE id = ${dto.classId}::uuid FOR UPDATE`;
       const cls = await tx.class.findUnique({ where: { id: dto.classId } });
       if (cls === null) {
         throw new NotFoundException('Not found');
