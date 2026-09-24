@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 
 /**
  * P4 acceptance (plan 13): invoices + generate-monthly idempotency, QR payment
@@ -126,6 +127,7 @@ describe('Billing: invoices and payments (e2e)', () => {
       });
     }
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     studentToken = await login(users.student);
     parentToken = await login(users.parent);
     parentBToken = await login(users.parentB);

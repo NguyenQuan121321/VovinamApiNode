@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 
 /**
  * P2 acceptance: classes/schedules/enrollments/attendance end to end — one full
@@ -83,6 +84,7 @@ describe('Classes, enrollments, attendance (e2e)', () => {
       });
     }
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     instructorToken = await login(users.instructor);
     instructorBToken = await login(users.instructorB);
     studentToken = await login(users.student);

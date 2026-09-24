@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 
 /**
  * P3 acceptance (plan 13): open exam -> register (EXAM_FEE invoice issued) ->
@@ -86,6 +87,7 @@ describe('Belt ranks and exams (e2e)', () => {
       });
     }
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     instructorToken = await login(users.instructor);
     studentToken = await login(users.student);
     parentToken = await login(users.parent);

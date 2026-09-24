@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 
 /**
  * Thesis primary value 3 — club activities (plan sections 6, 8; AD-07): the
@@ -143,6 +144,7 @@ describe('Announcements (e2e)', () => {
     });
 
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     instructorToken = await login(users.instructor);
     studentToken = await login(users.student);
     studentBToken = await login(users.studentB);

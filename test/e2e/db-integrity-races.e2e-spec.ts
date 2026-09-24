@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 
 /**
  * DB baseline §12 regression coverage (TASK-04): the three check-then-act
@@ -79,6 +80,7 @@ describe('Database integrity: capacity races, invite-code claim, rank regression
       });
     }
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     student1Token = await login(users.student1);
     student2Token = await login(users.student2);
     parent1Token = await login(users.parent1);
