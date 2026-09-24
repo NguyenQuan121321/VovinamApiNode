@@ -3,8 +3,8 @@
 Backend API for a legally registered Vovinam club: students (including minors), parents, instructors, classes and schedules, attendance, belt ranks and exams, tuition billing (QR gateway + cash), notifications, and data-processing consent.
 
 - **Stack:** NestJS 11 + Prisma + PostgreSQL 16, in-process outbox, no Redis (plan section 3)
-- **Spec:** [`docs/PLAN.md`](docs/PLAN.md) is the single source of truth
-- **Status:** P0 bootstrap — auth, domain, billing, notifications arrive in phases P1–P7
+- **Spec:** [`docs/PLAN.md`](docs/PLAN.md) is the single source of truth; the approved baselines in `docs/` (architecture, database, API) reconcile it against the code
+- **Status:** P0–P5 phases and the reconciliation/hardening tasks (TASK-00…TASK-05) are merged; see [`docs/FINAL_QA_REPORT.md`](docs/FINAL_QA_REPORT.md) and [`IMPLEMENTATION_PROGRESS.md`](IMPLEMENTATION_PROGRESS.md)
 
 ## Quickstart (local)
 
