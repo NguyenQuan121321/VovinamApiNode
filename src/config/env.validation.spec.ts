@@ -53,4 +53,59 @@ describe('validateEnv', () => {
   it('empty CORS string yields an empty allowlist', () => {
     expect(validateEnv({ ...valid, CORS_ALLOWED_ORIGINS: '' }).CORS_ALLOWED_ORIGINS).toEqual([]);
   });
+
+  it('MAIL_DRIVER=smtp requires SMTP_HOST and SMTP_FROM (fail-fast mail wiring)', () => {
+    expect(() => validateEnv({ ...valid, MAIL_DRIVER: 'smtp' })).toThrow(/SMTP_HOST/);
+    expect(() =>
+      validateEnv({ ...valid, MAIL_DRIVER: 'smtp', SMTP_HOST: 'smtp.example.com' }),
+    ).toThrow(/SMTP_FROM/);
+    expect(() =>
+      validateEnv({
+        ...valid,
+        MAIL_DRIVER: 'smtp',
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_FROM: 'no-reply@example.com',
+      }),
+    ).not.toThrow();
+    expect(validateEnv({ ...valid }).MAIL_DRIVER).toBe('logging');
+  });
+
+  it('rejects an unknown MAIL_DRIVER', () => {
+    expect(() => validateEnv({ ...valid, MAIL_DRIVER: 'carrier-pigeon' })).toThrow(/MAIL_DRIVER/);
+  });
+
+  it('PAYMENTS_GATEWAY=payos requires the credentials and checkout redirect URLs', () => {
+    expect(() => validateEnv({ ...valid, PAYMENTS_GATEWAY: 'payos' })).toThrow(/PAYOS_CLIENT_ID/);
+    expect(() =>
+      validateEnv({
+        ...valid,
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+      }),
+    ).toThrow(/PAYOS_RETURN_URL/);
+    expect(() =>
+      validateEnv({
+        ...valid,
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+        PAYOS_RETURN_URL: 'https://app.example.com/return',
+        PAYOS_CANCEL_URL: 'not a url',
+      }),
+    ).toThrow(/PAYOS_CANCEL_URL/);
+    expect(() =>
+      validateEnv({
+        ...valid,
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+        PAYOS_RETURN_URL: 'https://app.example.com/return',
+        PAYOS_CANCEL_URL: 'https://app.example.com/cancel',
+      }),
+    ).not.toThrow();
+  });
 });

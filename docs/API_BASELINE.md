@@ -238,10 +238,10 @@ Classification of TASK-00 items NOT implemented (per instruction 8):
 | # | Deferred change | Why | Owner |
 |---|---|---|---|
 | D-1 | `GET /students/me/schedule` aggregated schedule | DD-02: UX strengthening, not a boundary change | TASK-04 (optional) |
-| D-2 | Announcement INAPP notification fan-out on publish | AD-07 extension decision | TASK-04 |
+| D-2 | Announcement INAPP notification fan-out on publish | AD-07 extension decision | **DECIDED (TASK-04, 2026-09-24): DEFERRED.** The audience-scoped read API is the primary thesis feed (AD-07); per-user fan-out would add a fifth cross-module write (announcements → notifications outbox) requiring an AD-08 baseline amendment for optional value. Revisit only on club request. |
 | D-3 | oasdiff breaking-change gate | Infrastructure packaging, no API-shape issue | TASK-06 |
 | D-4 | ADMIN MFA enforcement guard | Guard-layer change within existing routes; no route shape change | TASK-05 |
-| D-5 | Real payOS/SePay adapter URLs behind the existing QR endpoint | Port design already additive; credentials missing | TASK-04/05 |
+| D-5 | Real payOS/SePay adapter URLs behind the existing QR endpoint | Port design already additive; credentials missing | **Implemented for payOS in TASK-04 (2026-09-24)**: `PayosGateway` behind `PaymentGatewayPort`, selected by `PAYMENTS_GATEWAY=payos` (credentials env-gated, fail-fast). Endpoint shapes unchanged. Sandbox verification (real QR → webhook → PAID) pending owner credentials (R-9). |
 | D-6 | `PATCH /students/:id` status approval endpoint distinct from generic PATCH | Already expressible today; churn without defect | never unless UX demands |
 
 ## 14. API Risks

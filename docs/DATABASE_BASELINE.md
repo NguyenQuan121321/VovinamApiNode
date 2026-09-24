@@ -314,6 +314,15 @@ TASK-04 with regression tests — they require no schema change, and inventing t
 exclusion constraints for a 300-user club would be unjustified complexity. All financial
 idempotency (webhook, cash, monthly generate) is already race-safe via DB constraints + claims.
 
+**Implementation status (TASK-04, 2026-09-24): all four §12 decisions are implemented with
+regression coverage** — enrollment create and exam registration open with a
+`SELECT … FOR UPDATE` on the class/exam row (`::uuid` cast required for Prisma raw params);
+`linkChild` claims the invite code with a conditional `updateMany` before creating the link
+(loser → uniform 404; P3-5 footgun replaced by an explicit 409 after bounded retries);
+`recordResult` re-validates the student's current rank order inside the result transaction on
+PASS (stale PASS → 409, no downgrade). Deterministic concurrency/regression e2e:
+`test/e2e/db-integrity-races.e2e-spec.ts` (4 tests).
+
 ## 13. Idempotency Rules
 
 | Operation | Rule | Enforcement |

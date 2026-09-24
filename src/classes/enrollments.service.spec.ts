@@ -46,6 +46,7 @@ const createdEnrollment = {
 
 function makePrismaMock() {
   const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     class: { findUnique: jest.fn() },
     studentProfile: { findFirst: jest.fn() },
     enrollment: { findFirst: jest.fn(), count: jest.fn(), create: jest.fn() },
@@ -106,6 +107,19 @@ describe('EnrollmentsService', () => {
     });
     expect(auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'enrollment_created', success: true }),
+    );
+  });
+
+  it('locks the class row before the capacity check (DB baseline §12 race fix)', async () => {
+    await service.create(dto);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = (tx.$queryRaw.mock.calls[0]?.[0] as string[]).join('');
+    expect(sql).toContain('FROM "classes"');
+    expect(sql).toContain('FOR UPDATE');
+    // The lock is the FIRST statement of the transaction: it precedes the
+    // capacity count that the concurrent-serialization guarantee depends on.
+    expect(Math.min(...tx.$queryRaw.mock.invocationCallOrder)).toBeLessThan(
+      Math.min(...tx.enrollment.count.mock.invocationCallOrder),
     );
   });
 

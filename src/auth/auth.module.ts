@@ -6,11 +6,13 @@ import { TokenService } from './domain/token.service';
 import { RefreshTokenService } from './domain/refresh-token.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { LoggingMailSender } from './mail/logging-mail.sender';
+import { createMailSender } from './mail/mail.factory';
 import { MAIL_PORT } from './mail/mail.port';
 import { SealService } from './mfa/seal.service';
 import { TotpService } from './mfa/totp.service';
 import { UsedTokenPurgeJob } from './used-token.purge';
+import { EnvService } from '../config/env.service';
+import { APP_LOGGER } from '../logging/pino-logger.factory';
 
 @Module({
   controllers: [AuthController],
@@ -24,7 +26,11 @@ import { UsedTokenPurgeJob } from './used-token.purge';
     UsedTokenPurgeJob,
     JwtAuthGuard,
     RolesGuard,
-    { provide: MAIL_PORT, useClass: LoggingMailSender },
+    {
+      provide: MAIL_PORT,
+      inject: [EnvService, APP_LOGGER],
+      useFactory: createMailSender,
+    },
   ],
   exports: [
     TokenService,

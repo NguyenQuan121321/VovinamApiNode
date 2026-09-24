@@ -75,6 +75,55 @@ export class EnvService {
     return this.getOptional('METRICS_TOKEN');
   }
 
+  /** logging | smtp — selects the MAIL_PORT adapter (auth mail factory). */
+  get mailDriver(): 'logging' | 'smtp' {
+    // Joi validates the value; the assertion only narrows the string type.
+    return this.get('MAIL_DRIVER') as 'logging' | 'smtp';
+  }
+
+  get smtpHost(): string {
+    // Required by validation when MAIL_DRIVER=smtp; the getter fails fast if miswired.
+    return this.get('SMTP_HOST') as string;
+  }
+
+  get smtpPort(): number {
+    return this.get('SMTP_PORT');
+  }
+
+  get smtpUser(): string | undefined {
+    return this.getOptional('SMTP_USER');
+  }
+
+  get smtpPassword(): string | undefined {
+    return this.getOptional('SMTP_PASSWORD');
+  }
+
+  get smtpFrom(): string {
+    // Required by validation when MAIL_DRIVER=smtp; the getter fails fast if miswired.
+    return this.get('SMTP_FROM') as string;
+  }
+
+  get payosClientId(): string {
+    // Required by validation when PAYMENTS_GATEWAY=payos.
+    return this.get('PAYOS_CLIENT_ID') as string;
+  }
+
+  get payosApiKey(): string {
+    return this.get('PAYOS_API_KEY') as string;
+  }
+
+  get payosChecksumKey(): string {
+    return this.get('PAYOS_CHECKSUM_KEY') as string;
+  }
+
+  get payosReturnUrl(): string {
+    return this.get('PAYOS_RETURN_URL') as string;
+  }
+
+  get payosCancelUrl(): string {
+    return this.get('PAYOS_CANCEL_URL') as string;
+  }
+
   /** payos | sepay | simulated — QR payments are config-gated (plan stop rules). */
   get paymentsGateway(): 'payos' | 'sepay' | 'simulated' {
     // Joi validates the value; the assertion only narrows the string type.

@@ -133,6 +133,10 @@ export class ExamsService {
   ): Promise<Record<string, unknown>> {
     await this.ownership.assertCanAccess(caller, dto.studentId);
     const registration = await this.prisma.$transaction(async (tx) => {
+      // DB baseline §12: serialize concurrent registrations per exam — the
+      // capacity and duplicate checks below are check-then-act under READ
+      // COMMITTED, so without this row lock two creates can both pass.
+      await tx.$queryRaw`SELECT id FROM "belt_exams" WHERE id = ${examId}::uuid FOR UPDATE`;
       const exam = await tx.beltExam.findUnique({ where: { id: examId } });
       if (exam === null) {
         throw new NotFoundException('Not found');
@@ -258,6 +262,28 @@ export class ExamsService {
         },
       });
       if (dto.status === 'RESULT_PASS') {
+        // DB baseline §12 (DD-05): re-validate the student's rank at result time.
+        // A PASS recorded after an earlier promotion must never move the belt
+        // down; the registration-time check cannot cover concurrent results.
+        const profile = await tx.studentProfile.findUnique({
+          where: { id: registration.studentId },
+          select: { currentBeltRankId: true },
+        });
+        if (profile?.currentBeltRankId != null) {
+          const ranks = await tx.beltRank.findMany({
+            where: { id: { in: [profile.currentBeltRankId, registration.exam.targetRankId] } },
+            select: { id: true, orderIndex: true },
+          });
+          const current = ranks.find((r) => r.id === profile.currentBeltRankId);
+          const target = ranks.find((r) => r.id === registration.exam.targetRankId);
+          if (
+            current !== undefined &&
+            target !== undefined &&
+            current.orderIndex >= target.orderIndex
+          ) {
+            throw new ConflictException('Student already holds this rank or higher');
+          }
+        }
         await tx.studentProfile.update({
           where: { id: registration.studentId },
           data: { currentBeltRankId: registration.exam.targetRankId },
