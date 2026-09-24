@@ -51,6 +51,13 @@ endpoint works.
 **APPLICATION-LAYER PROTECTION (implemented here):**
 - Global per-IP throttle (`RATE_LIMIT_TTL_SECONDS` / `RATE_LIMIT_MAX_REQUESTS`, default
   100 req/60 s), IPv6 /64 bucketing, tracker taken from the proxy-resolved `request.ip`.
+- **Strict per-IP auth-surface window (2026-09-25):** `AuthIpThrottleGuard` applies a
+  second, tighter fixed-window bucket (`AUTH_IP_LIMIT_MAX`, default 30 req/60 s) to every
+  `/auth` route — register, login, refresh, verification mail, reset, MFA. Counters live
+  in the SharedStore (same primitive as lockout/mail budgets) and use the same hardened
+  tracker. Closes the low-volume abuse windows: credential stuffing, mail bombing,
+  verification-token guessing. Unit-tested (`auth-ip-throttle.guard.spec.ts`); e2e raises
+  the limit via env.
 - Throttle-key hardening (this task, audit I-4/P2-7): the bucket key is Express's
   first-untrusted-from-socket address (`request.ip`). The previous `request.ips[0]` key was
   attacker-rotatable behind an edge that APPENDS to `X-Forwarded-For` (client-supplied XFF
@@ -58,9 +65,15 @@ endpoint works.
   **Deployment requirement:** the edge proxy must overwrite or strip client-supplied
   `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For $remote_addr;` or
   `$proxy_add_x_forwarded_for` on a trusted chain). With a non-conforming proxy, set
-  `trust proxy` to 0 (bootstrap.ts) so the socket address is used.
+  `trust proxy` to 0 (bootstrap.ts) so the socket address is used. On Render the edge
+  overwrites XFF and `trust proxy = 1` matches its single hop (docs/DEPLOY_RENDER.md §5).
 - Login lockout, shared TOTP failure bucket, per-account mail budgets, 1 MB JSON body cap,
   `ValidationPipe(whitelist, forbidNonWhitelisted)`, ParseUuidPipe on all id params.
+- **Anti-scraping/anti-indexing posture (2026-09-25, deliberately light):** every response
+  carries `X-Robots-Tag: noindex, nofollow`; Swagger is off in production; list endpoints
+  are paginated (limit ≤ 100); error envelopes are uniform with no schema disclosure. For
+  an authenticated club API this is the honest ceiling — a determined scraper with valid
+  credentials cannot be fully prevented, only rate-limited and kept out of search indexes.
 
 **INFRASTRUCTURE-LAYER PROTECTION (NOT implemented in this codebase):**
 TLS termination, WAF/CDN, volumetric/network DDoS mitigation, HSTS at the proxy are the
@@ -121,14 +134,14 @@ prom-client metrics (HTTP durations/errors, default process metrics) at bearer-p
 no passwords, tokens, TOTP codes, or mail bodies are logged; `MAIL_LOG_FILE` (the one
 token-bearing sink) is now production-forbidden (§5).
 
-## 8. Performance baseline (measured 2026-09-24, this session)
+## 8. Performance baseline (measured 2026-09-24, re-verified 2026-09-25)
 
 Zero-dependency load script: `load/smoke.mjs` (plan §3 reserves `load/` for this). Workload
 assumption: ~300-user club, single instance — **no enterprise targets are implied**.
-Method: disposable PostgreSQL 18 (:5433), server built from the pre-TASK-05 tree
-(baseline) and the TASK-05 tree, 20 VU closed-loop fetch, 4 s warmup + 12 s measurement per
-scenario, 2 runs per tree. Client and server share one host, so absolute numbers carry host
-noise; the unaffected control endpoint bounds that noise.
+Method: disposable PostgreSQL 18 (:5433), server built from the measured tree, 20 VU
+closed-loop fetch, 4 s warmup + 12 s measurement per scenario, 2 runs per tree. Client and
+server share one host, so absolute numbers carry host noise; the unaffected control
+endpoint bounds that noise.
 
 | Scenario (20 VU) | baseline rps | baseline p50/p95/p99 ms | after rps | after p50/p95/p99 ms |
 |---|---|---|---|---|
@@ -139,6 +152,19 @@ noise; the unaffected control endpoint bounds that noise.
 
 Server process (prom metrics): RSS ≈ 415 MB, heap ≈ 180 MB used, event-loop lag ≤ 4 ms,
 ≈ 90 s CPU across ~64 s of wall-clock load (≈ 1.4 cores) — identical across trees.
+
+**Re-measurement 2026-09-25 (auth-limiter + noindex-header tree, throttles disabled for
+measurement):** /healthz 2690 rps (p50 6.3 / p95 19.5 / p99 26.4 ms), /readyz 1330 rps
+(p50 13.8 ms), GET /classes 248 rps (p50 78.3 / p99 118.6 ms), GET /invoices 255 rps
+(p50 76.1 / p99 108.4 ms), 0 errors, RSS ≈ 385 MB, event-loop lag ≈ 6 ms. Absolute
+numbers sit below the 09-24 run (different DB state — the e2e suite had just seeded the
+database — plus host load); the decision-relevant comparison is internal: the
+classes↔invoices ratio is unchanged (1.03 vs 1.1 across runs), i.e. the new auth-surface
+guard and the per-response `X-Robots-Tag` header — which do not execute on these paths —
+cost nothing measurable here. The same session also demonstrated the throttler under
+default production settings: a single IP above 100 req/60 s is answered 429 across all
+scenarios (≈ 23k blocked requests in the first measurement run before the limit was
+raised for measurement).
 
 Reading (honest): the ADMIN MFA guard adds one indexed primary-key lookup per request on
 admin-admitting routes. Measured invoices delta is ≈ −7 % median throughput, but the
@@ -173,10 +199,11 @@ index (DDB-3).
 Code existence is **not** compliance. Every legal/accounting cell above needs named, dated
 human verification before any claim is made (contract §11).
 
-## 11. Remaining production limitations (TASK-06 / owner)
+## 11. Remaining production limitations (owner)
 
 1. Deployment trial not executed: deploy CI job is a stub (no `RENDER_DEPLOY_HOOK` /
-   `SMOKE_TEST_URL`), no release-command migration wiring, no staging/prod instance.
+   `SMOKE_TEST_URL`), no staging/prod instance. The concrete setup steps are now written
+   down in `docs/DEPLOY_RENDER.md` (2026-09-25); executing them is the owner action.
 2. Backup/DR: none demonstrated (§9).
 3. payOS sandbox verification (real QR → webhook → PAID) pending owner credentials; the
    adapter is verified against SDK-derived test vectors only.
