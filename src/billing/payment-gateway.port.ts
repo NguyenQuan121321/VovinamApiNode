@@ -27,6 +27,9 @@ export interface GatewayWebhookEvent {
  * PaymentGateway port (plan 7.5): exactly ONE QR gateway behind this interface
  * (payOS or SePay), swappable without touching the billing flow. The simulated
  * adapter implements the same contract for local/e2e runs without credentials.
+ * Real adapters throw ServiceUnavailableException when the provider is
+ * unreachable or rejects the request; the global filter maps it into the
+ * response envelope.
  */
 export interface PaymentGatewayPort {
   readonly provider: 'payos' | 'sepay' | 'simulated';
