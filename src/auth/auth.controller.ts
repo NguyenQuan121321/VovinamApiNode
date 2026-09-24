@@ -32,7 +32,11 @@ import {
 import { MfaLoginVerifyDto, TotpCodeDto, TotpDisableDto } from './dto/mfa.dto';
 import { PageDto } from '../common/pagination.dto';
 import { ParseUuidPipe } from '../common/parse-uuid.pipe';
+import { AuthIpThrottleGuard } from './auth-ip-throttle.guard';
 
+// Strict per-IP abuse window on the whole auth surface (register/login/tokens/MFA);
+// the global per-IP throttle still applies underneath (plan 4.1, S-10).
+@UseGuards(AuthIpThrottleGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

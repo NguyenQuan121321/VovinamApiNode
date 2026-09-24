@@ -17,6 +17,9 @@ export interface Env {
   LOGIN_LOCKOUT_DURATION: string;
   RATE_LIMIT_TTL_SECONDS: number;
   RATE_LIMIT_MAX_REQUESTS: number;
+  /** Strict per-IP window for the /auth surface only (login, register, tokens, MFA). */
+  AUTH_IP_LIMIT_MAX: number;
+  AUTH_IP_LIMIT_TTL_SECONDS: number;
   /** Parsed from a comma-separated env value into an origin allowlist. */
   CORS_ALLOWED_ORIGINS: string[];
   SWAGGER_ENABLED: boolean;
@@ -76,6 +79,8 @@ export const envSchema = Joi.object({
   LOGIN_LOCKOUT_DURATION: Joi.string().default('15m'),
   RATE_LIMIT_TTL_SECONDS: Joi.number().integer().min(1).default(60),
   RATE_LIMIT_MAX_REQUESTS: Joi.number().integer().min(1).default(100),
+  AUTH_IP_LIMIT_MAX: Joi.number().integer().min(1).default(30),
+  AUTH_IP_LIMIT_TTL_SECONDS: Joi.number().integer().min(1).default(60),
   CORS_ALLOWED_ORIGINS: Joi.string().allow('').default(''),
   SWAGGER_ENABLED: Joi.boolean().default(false),
   METRICS_TOKEN: Joi.string()
