@@ -3,6 +3,8 @@ process.env.NODE_ENV ??= 'local';
 process.env.DATABASE_URL ??= 'postgresql://u:p@localhost:5432/unused?schema=public';
 process.env.JWT_SECRET ??= 'ci-jwt-secret-0123456789abcdef0123456789abcdef';
 process.env.APP_ENCRYPTION_KEY ??= 'abababababababababababababababababababababababababababababababab';
+// PAYMENTS_GATEWAY defaults to simulated, which fail-fasts without a webhook secret.
+process.env.PAYMENTS_WEBHOOK_SECRET ??= 'ci-webhook-secret-0123456789abcdef';
 
 import 'reflect-metadata';
 import { writeFileSync } from 'node:fs';

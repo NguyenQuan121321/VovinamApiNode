@@ -26,3 +26,18 @@ export function trackerForIp(ip: string): string {
     .map((group) => group.padStart(4, '0'))
     .join(':')}`;
 }
+
+/**
+ * Tracker for a request (audit I-4/P2-7): uses Express's proxy-resolved client
+ * address — with `trust proxy = 1` this is the first address NOT trusted from
+ * the socket side, i.e. the one the edge proxy appended. `req.ips[0]` must NOT
+ * be used: behind an edge that APPENDS to X-Forwarded-For, a client-supplied
+ * XFF prefix lands there and rotates the abuse bucket per request.
+ *
+ * Deployment requirement (docs/SECURITY.md): the edge proxy must overwrite or
+ * strip client-supplied X-Forwarded-For; with a non-conforming proxy, drop
+ * `trust proxy` to 0 so the socket address is used.
+ */
+export function trackerFromRequest(req: { ip?: string }): string {
+  return trackerForIp(req.ip ?? 'unknown');
+}

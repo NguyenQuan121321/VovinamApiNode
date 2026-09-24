@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 import { AuditService } from '../../src/auth/audit/audit.service';
 import { readMailLog } from './helpers/mail-log';
 
@@ -139,6 +140,7 @@ describe('Notifications and consent (e2e)', () => {
     noAccountProfileId = noAccount.id;
 
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     studentToken = await login(users.student);
     parentToken = await login(users.parent);
     parentBToken = await login(users.parentB);

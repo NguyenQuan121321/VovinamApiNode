@@ -3,6 +3,8 @@ import { validateEnv } from './env.validation';
 const valid: Record<string, unknown> = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db?schema=public',
   JWT_SECRET: '0123456789abcdef0123456789abcdef',
+  // PAYMENTS_GATEWAY defaults to simulated, which requires the webhook secret.
+  PAYMENTS_WEBHOOK_SECRET: 'e2e-payments-webhook-secret-0123456789',
 };
 
 describe('validateEnv', () => {
@@ -40,6 +42,13 @@ describe('validateEnv', () => {
         NODE_ENV: 'production',
         APP_ENCRYPTION_KEY: 'a'.repeat(64),
         METRICS_TOKEN: 'tokentokentoken12',
+        // Production also demands an explicit real gateway (simulated is forbidden).
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+        PAYOS_RETURN_URL: 'https://app.example.com/return',
+        PAYOS_CANCEL_URL: 'https://app.example.com/cancel',
       }),
     ).not.toThrow();
   });
@@ -107,5 +116,71 @@ describe('validateEnv', () => {
         PAYOS_CANCEL_URL: 'https://app.example.com/cancel',
       }),
     ).not.toThrow();
+  });
+
+  it('forbids the simulated gateway in production (audit I-3/J-3)', () => {
+    const prodBase = {
+      ...valid,
+      NODE_ENV: 'production',
+      APP_ENCRYPTION_KEY: 'a'.repeat(64),
+      METRICS_TOKEN: 'tokentokentoken12',
+    };
+    expect(() => validateEnv(prodBase)).toThrow(/PAYMENTS_GATEWAY/);
+    expect(() => validateEnv({ ...prodBase, PAYMENTS_GATEWAY: 'simulated' })).toThrow(
+      /PAYMENTS_GATEWAY/,
+    );
+    // payOS remains a legal production channel (checksum key still required).
+    expect(() =>
+      validateEnv({
+        ...prodBase,
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+        PAYOS_RETURN_URL: 'https://app.example.com/return',
+        PAYOS_CANCEL_URL: 'https://app.example.com/cancel',
+      }),
+    ).not.toThrow();
+  });
+
+  it('requires the webhook secret whenever the simulated gateway is selected', () => {
+    expect(() => validateEnv({ ...valid, PAYMENTS_WEBHOOK_SECRET: '' })).toThrow(
+      /PAYMENTS_WEBHOOK_SECRET/,
+    );
+    expect(() => validateEnv({ ...valid, PAYMENTS_WEBHOOK_SECRET: 'short' })).toThrow(
+      /PAYMENTS_WEBHOOK_SECRET/,
+    );
+    // A real gateway verifies webhooks with its own credentials instead.
+    expect(() =>
+      validateEnv({
+        ...valid,
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+        PAYOS_RETURN_URL: 'https://app.example.com/return',
+        PAYOS_CANCEL_URL: 'https://app.example.com/cancel',
+        PAYMENTS_WEBHOOK_SECRET: '',
+      }),
+    ).not.toThrow();
+  });
+
+  it('forbids MAIL_LOG_FILE in production (audit P3-4: token-bearing mail dump)', () => {
+    expect(() => validateEnv({ ...valid, MAIL_LOG_FILE: '/tmp/mail.log' })).not.toThrow();
+    expect(() =>
+      validateEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        APP_ENCRYPTION_KEY: 'a'.repeat(64),
+        METRICS_TOKEN: 'tokentokentoken12',
+        PAYMENTS_GATEWAY: 'payos',
+        PAYOS_CLIENT_ID: 'id',
+        PAYOS_API_KEY: 'key',
+        PAYOS_CHECKSUM_KEY: 'checksum',
+        PAYOS_RETURN_URL: 'https://app.example.com/return',
+        PAYOS_CANCEL_URL: 'https://app.example.com/cancel',
+        MAIL_LOG_FILE: '/tmp/mail.log',
+      }),
+    ).toThrow(/MAIL_LOG_FILE/);
   });
 });

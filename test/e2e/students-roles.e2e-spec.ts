@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, type User } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
+import { enrollTotp } from './helpers/mfa';
 
 /**
  * Role-scoped student access (plan 7.3/7.4, S-01/S-04): the student reads their own
@@ -77,6 +78,7 @@ describe('Students roles and access (e2e)', () => {
       });
     }
     adminToken = await login(users.admin);
+    await enrollTotp(app, adminToken);
     studentToken = await login(users.student);
     parentToken = await login(users.parent);
     parentBToken = await login(users.parentB);
