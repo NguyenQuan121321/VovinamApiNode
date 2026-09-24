@@ -23,11 +23,17 @@ export interface Env {
   METRICS_TOKEN?: string;
   /** logging (default) keeps outbound mail in the pino log; smtp delivers via nodemailer. */
   MAIL_DRIVER: 'logging' | 'smtp';
+  /**
+   * Test-only capture file for LoggingMailSender (writes full messages incl.
+   * single-use tokens to disk); forbidden in production.
+   */
+  MAIL_LOG_FILE?: string;
   SMTP_HOST?: string;
   SMTP_PORT: number;
   SMTP_USER?: string;
   SMTP_PASSWORD?: string;
   SMTP_FROM?: string;
+
   PAYOS_CLIENT_ID?: string;
   PAYOS_API_KEY?: string;
   PAYOS_CHECKSUM_KEY?: string;
@@ -89,6 +95,13 @@ export const envSchema = Joi.object({
     then: Joi.required(),
     otherwise: optionalString,
   }),
+  // Test-only mail capture; writing full messages (incl. single-use tokens) to
+  // disk must never be possible in production (audit P3-4).
+  MAIL_LOG_FILE: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.forbidden(),
+    otherwise: optionalString,
+  }),
   PAYOS_CLIENT_ID: Joi.string().when('PAYMENTS_GATEWAY', {
     is: 'payos',
     then: Joi.required(),
@@ -114,8 +127,22 @@ export const envSchema = Joi.object({
     then: Joi.required(),
     otherwise: optionalString,
   }),
-  PAYMENTS_GATEWAY: Joi.string().valid('payos', 'sepay', 'simulated').default('simulated'),
-  PAYMENTS_WEBHOOK_SECRET: Joi.string().min(16).allow('').optional(),
+  // The simulated gateway must never reach production (audit I-3/J-3): a
+  // fake checkout must not be able to settle in a live deployment.
+  PAYMENTS_GATEWAY: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().valid('payos', 'sepay').required(),
+    otherwise: Joi.string().valid('payos', 'sepay', 'simulated').default('simulated'),
+  }),
+  // Without this secret the simulated adapter rejects every webhook and
+  // payments silently never settle — fail fast instead (audit I-3).
+  PAYMENTS_WEBHOOK_SECRET: Joi.string()
+    .min(16)
+    .when('PAYMENTS_GATEWAY', {
+      is: 'simulated',
+      then: Joi.required(),
+      otherwise: Joi.string().min(16).allow('').optional(),
+    }),
   ZALO_OA_ACCESS_TOKEN: optionalString,
   ZALO_OA_APP_ID: optionalString,
   ZALO_OA_SECRET_KEY: optionalString,
