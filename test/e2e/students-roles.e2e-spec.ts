@@ -204,4 +204,45 @@ describe('Students roles and access (e2e)', () => {
     const account = await prisma.user.findUnique({ where: { email: users.student } });
     expect((account as User | null)?.isActive).toBe(false);
   });
+
+  it('S-02: soft-deleting a student with invoices leaves the financial chain intact', async () => {
+    // Account-less profile (the minor path) keeps this test independent of the suite's
+    // shared profile, which the previous test already soft-deleted.
+    const created = await send(
+      'post',
+      '/api/v1/students',
+      { fullName: 'Tran Thi S02', dob: '2013-03-03', gender: 'FEMALE' },
+      adminToken,
+    ).expect(201);
+    const s02ProfileId = created.body.data.id as string;
+
+    const invoice = await send(
+      'post',
+      '/api/v1/invoices',
+      {
+        studentId: s02ProfileId,
+        type: 'UNIFORM',
+        items: [{ description: 'Club uniform', quantity: 1, unitAmount: 200000 }],
+      },
+      adminToken,
+    ).expect(201);
+    const invoiceId = invoice.body.data.id as string;
+
+    await send('delete', `/api/v1/students/${s02ProfileId}`, {}, adminToken).expect(200);
+    await get(`/api/v1/students/${s02ProfileId}`, adminToken).expect(404);
+
+    // The money chain is RESTRICT-anchored and never hard-deleted; the profile is only
+    // hidden behind deleted_at (plan 7.2 / S-02).
+    const keptInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { items: true },
+    });
+    expect(keptInvoice).not.toBeNull();
+    expect(keptInvoice?.total).toBe(200000);
+    expect(keptInvoice?.status).toBe('UNPAID');
+    expect(keptInvoice?.items).toHaveLength(1);
+
+    const profile = await prisma.studentProfile.findUnique({ where: { id: s02ProfileId } });
+    expect(profile?.deletedAt).not.toBeNull();
+  });
 });
