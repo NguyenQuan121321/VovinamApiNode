@@ -26,6 +26,8 @@ describe('Health and ops endpoints (e2e)', () => {
       .expect((res) => {
         expect(res.body).toEqual({ code: 200, message: 'OK', data: { status: 'ok' } });
         expect(res.headers['x-request-id']).toBeDefined();
+        // Anti-scraping posture: the API (and dev-only Swagger) must never be indexed.
+        expect(res.headers['x-robots-tag']).toBe('noindex, nofollow');
       }));
 
   it('GET /readyz answers 200 when the database is reachable', () =>
