@@ -29,7 +29,6 @@ describe('Matrix workflows (e2e)', () => {
   let otherClassId = '';
   let studentProfileId = '';
   let childProfileId = '';
-  let invoiceId = '';
   let month = 1;
   let year = 2026;
   let currentRank = { id: 0 };
@@ -147,7 +146,7 @@ describe('Matrix workflows (e2e)', () => {
           fullName: 'Le Van Tuan',
           dob: new Date('2006-03-12'),
           gender: 'MALE',
-          inviteCode: 'WKFLOW1',
+          inviteCode: ('' + stamp).slice(-8).padStart(8, 'B'),
           status: 'ACTIVE',
           currentBeltRankId: currentRank.id,
         },
@@ -159,7 +158,7 @@ describe('Matrix workflows (e2e)', () => {
           fullName: 'Nguyen Thi Bong',
           dob: new Date('2014-07-20'),
           gender: 'FEMALE',
-          inviteCode: 'WKFLOW2',
+          inviteCode: ('' + (stamp + 1)).slice(-8).padStart(8, 'C'),
           status: 'ACTIVE',
         },
       })
@@ -181,7 +180,8 @@ describe('Matrix workflows (e2e)', () => {
     const now = new Date();
     month = now.getUTCMonth() + 1;
     year = now.getUTCFullYear();
-    const invoice = await send(
+    // One TUITION invoice for the current period backs the tuition report test.
+    await send(
       'post',
       '/api/v1/invoices',
       {
@@ -193,7 +193,6 @@ describe('Matrix workflows (e2e)', () => {
       },
       adminToken,
     ).expect(201);
-    invoiceId = invoice.body.data.id as string;
   });
 
   afterAll(async () => {
@@ -382,11 +381,12 @@ describe('Matrix workflows (e2e)', () => {
   });
 
   it('discount codes: CRUD, validation, and application on invoices (row 23)', async () => {
+    const discountCode = `E2E${String(stamp).slice(-6)}`;
     const created = await send(
       'post',
       '/api/v1/discounts',
       {
-        code: 'E2E10',
+        code: discountCode,
         description: '10% off',
         percentOff: 10,
         validFrom: '2026-01-01',
@@ -411,7 +411,7 @@ describe('Matrix workflows (e2e)', () => {
     await send(
       'post',
       '/api/v1/discounts',
-      { code: 'E2E10', percentOff: 5, validFrom: '2026-01-01', validUntil: '2030-01-01' },
+      { code: discountCode, percentOff: 5, validFrom: '2026-01-01', validUntil: '2030-01-01' },
       adminToken,
     ).expect(409);
 
@@ -422,7 +422,7 @@ describe('Matrix workflows (e2e)', () => {
         studentId: studentProfileId,
         type: 'UNIFORM',
         items: [{ description: 'Uniform', quantity: 1, unitAmount: 500000 }],
-        discountCode: 'e2e10',
+        discountCode: discountCode.toLowerCase(),
       },
       adminToken,
     ).expect(201);
@@ -494,14 +494,14 @@ describe('Matrix workflows (e2e)', () => {
     expect(unpaid?.invoices).toBeGreaterThanOrEqual(1);
 
     const belts = await get('/api/v1/admin/reports/belts', adminToken).expect(200);
+    // The suite creates its own rank ladder on a CI-unseeded database.
     expect(
       (belts.body.data.distribution as Array<Record<string, unknown>>).length,
-    ).toBeGreaterThanOrEqual(15);
+    ).toBeGreaterThanOrEqual(3);
     await get('/api/v1/admin/reports/belts', instructorToken).expect(200);
     await get('/api/v1/admin/reports/belts', studentToken).expect(403);
     await get(`/api/v1/admin/reports/tuition?month=${month}&year=${year}`, studentToken).expect(
       403,
     );
-    void invoiceId;
   });
 });

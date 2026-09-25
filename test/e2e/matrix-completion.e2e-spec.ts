@@ -93,7 +93,7 @@ describe('Admin backoffice completion (e2e)', () => {
           dob: new Date('2006-03-12'),
           gender: 'MALE',
           phone: '0901110001',
-          inviteCode: 'DEMOABC',
+          inviteCode: ('' + stamp).slice(-8).padStart(8, 'A'),
           status: 'ACTIVE',
         },
       })

@@ -241,18 +241,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma migrate deploy
-      - name: Run e2e suite (full output emitted as annotations on failure)
+      - name: Run e2e suite (failure summary emitted as annotations on failure)
         run: |
           set +e
           npm run test:e2e > e2e-output.txt 2>&1
           EXIT=$?
           if [ "$EXIT" != "0" ]; then
-            echo "::group::e2e failure output (first 160 lines)"
-            sed -n '1,160p' e2e-output.txt
+            echo "::group::e2e failure summary (tail)"
+            tail -80 e2e-output.txt
             echo "::endgroup::"
-            # Emit up to 45 non-empty lines as annotations. awk exits itself at the
-            # cap — a grep|head pipeline would SIGPIPE-kill the loop mid-way.
-            awk 'NF { print substr($0, 1, 160); count++; if (count == 45) exit }' e2e-output.txt |
+            # Jest prints the failing-test summaries at the END of the output, so
+            # annotate the LAST 45 non-empty lines (first-45 is boot log noise).
+            # awk exits itself at the cap — a grep|head pipeline would SIGPIPE-kill
+            # the loop mid-way.
+            tac e2e-output.txt | awk 'NF { print substr($0, 1, 160); count++; if (count == 45) exit }' |
+              tac |
               while IFS= read -r line; do
                 echo "::error title=e2e::$line"
               done
