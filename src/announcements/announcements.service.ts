@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
@@ -14,6 +19,11 @@ import type {
  * an audience — the whole club or one class. The read API is the thesis feed;
  * audience membership derives from existing relationship data only (enrollment,
  * verified parent link, class instructorship), never from new tables.
+ *
+ * Writes (matrix row 24): ADMIN manages everything; an INSTRUCTOR may post and
+ * maintain CLASS-audience announcements for the classes they teach — never
+ * club-wide ones. Foreign-class targets answer 404 (anti-probing), audience
+ * misuse answers 403.
  */
 @Injectable()
 export class AnnouncementsService {
@@ -60,6 +70,14 @@ export class AnnouncementsService {
     caller: AuthenticatedUser,
     dto: CreateAnnouncementDto,
   ): Promise<Record<string, unknown>> {
+    if (caller.role === 'INSTRUCTOR') {
+      if (dto.audience !== 'CLASS' || dto.classId === undefined) {
+        throw new ForbiddenException(
+          'Instructors may only post announcements to their own classes',
+        );
+      }
+      await this.assertOwnClass(caller, dto.classId);
+    }
     const classId = await this.resolveClassTarget(dto.audience, dto.classId);
     const created = await this.prisma.announcement.create({
       data: {
@@ -83,10 +101,29 @@ export class AnnouncementsService {
    * Partial edit. The effective audience/classId pair must stay consistent
    * (audience=ALL clears the class target; audience=CLASS requires one).
    */
-  async update(id: string, dto: UpdateAnnouncementDto): Promise<Record<string, unknown>> {
+  async update(
+    caller: AuthenticatedUser,
+    id: string,
+    dto: UpdateAnnouncementDto,
+  ): Promise<Record<string, unknown>> {
     const existing = await this.prisma.announcement.findUnique({ where: { id } });
     if (existing === null) {
       throw new NotFoundException('Not found');
+    }
+    if (caller.role === 'INSTRUCTOR') {
+      if (existing.createdBy !== caller.id) {
+        throw new NotFoundException('Not found');
+      }
+      const audience = dto.audience ?? existing.audience;
+      if (audience !== 'CLASS') {
+        throw new ForbiddenException(
+          'Instructors may only post announcements to their own classes',
+        );
+      }
+      const targetClassId = dto.classId ?? existing.classId;
+      if (targetClassId !== null && targetClassId !== undefined) {
+        await this.assertOwnClass(caller, targetClassId);
+      }
     }
     const audience = dto.audience ?? existing.audience;
     // Switching to ALL without an explicit classId drops the inherited class
@@ -108,17 +145,35 @@ export class AnnouncementsService {
     return this.serialize(updated);
   }
 
-  async remove(id: string): Promise<{ deleted: boolean }> {
-    const removed = await this.prisma.announcement.deleteMany({ where: { id } });
-    if (removed.count === 0) {
+  async remove(caller: AuthenticatedUser, id: string): Promise<{ deleted: boolean }> {
+    const existing = await this.prisma.announcement.findUnique({
+      where: { id },
+      select: { id: true, createdBy: true },
+    });
+    if (existing === null) {
       throw new NotFoundException('Not found');
     }
+    if (caller.role !== 'ADMIN' && existing.createdBy !== caller.id) {
+      throw new NotFoundException('Not found');
+    }
+    await this.prisma.announcement.delete({ where: { id } });
     this.audit.record({
       event: 'announcement_deleted',
       success: true,
       detail: `announcement:${id}`,
     });
     return { deleted: true };
+  }
+
+  /** Instructors manage only announcements targeting a class they teach. */
+  private async assertOwnClass(caller: AuthenticatedUser, classId: string): Promise<void> {
+    const owned = await this.prisma.class.findFirst({
+      where: { id: classId, instructorId: caller.id },
+      select: { id: true },
+    });
+    if (owned === null) {
+      throw new NotFoundException('Not found');
+    }
   }
 
   /**

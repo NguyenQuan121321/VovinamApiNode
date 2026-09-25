@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -16,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/guards/roles.decorator';
 import { CurrentUser } from '../auth/guards/current-user.decorator';
 import { ParseUuidPipe } from '../common/parse-uuid.pipe';
+import { PageDto } from '../common/pagination.dto';
 import type { RequestWithRawBody } from '../common/request-raw-body';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import { BillingService } from './billing.service';
@@ -29,6 +32,13 @@ import {
   PaymentOutcomeDto,
   RevenueQueryDto,
 } from './dto/billing.dto';
+import {
+  CreateDiscountCodeDto,
+  TuitionReportQueryDto,
+  UpdateBankAccountDto,
+  UpdateDiscountCodeDto,
+  UpdateTuitionRatesDto,
+} from './dto/settings.dto';
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -66,6 +76,63 @@ export class BillingController {
   @Roles('ADMIN')
   revenue(@CurrentUser() user: AuthenticatedUser, @Query() query: RevenueQueryDto) {
     return this.billing.revenue(user, new Date(query.from), new Date(query.to));
+  }
+
+  /** Tuition close report for one period (matrix row 27). */
+  @Get('admin/reports/tuition')
+  @Roles('ADMIN')
+  tuitionReport(@Query() query: TuitionReportQueryDto) {
+    return this.billing.tuitionReport(query.month, query.year);
+  }
+
+  // ── Admin settings (matrix row 29): tuition rates + receiving bank account ──
+
+  @Get('admin/billing/settings')
+  @Roles('ADMIN')
+  getSettings() {
+    return this.billing.getSettings();
+  }
+
+  @Put('admin/billing/settings/tuition-rates')
+  @Roles('ADMIN')
+  updateTuitionRates(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateTuitionRatesDto) {
+    return this.billing.updateTuitionRates(user, dto.rates);
+  }
+
+  @Put('admin/billing/settings/bank-account')
+  @Roles('ADMIN')
+  updateBankAccount(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateBankAccountDto) {
+    return this.billing.updateBankAccount(user, dto.bankAccount);
+  }
+
+  // ── Discount codes (matrix row 23) ──────────────────────────────────────────
+
+  @Get('discounts')
+  @Roles('ADMIN')
+  listDiscounts(@Query() query: PageDto) {
+    return this.billing.listDiscountCodes(query.page ?? 1, query.limit ?? 20);
+  }
+
+  @Post('discounts')
+  @Roles('ADMIN')
+  createDiscount(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateDiscountCodeDto) {
+    return this.billing.createDiscountCode(user, dto);
+  }
+
+  @Patch('discounts/:id')
+  @Roles('ADMIN')
+  updateDiscount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+    @Body() dto: UpdateDiscountCodeDto,
+  ) {
+    return this.billing.updateDiscountCode(user, id, dto);
+  }
+
+  @Delete('discounts/:id')
+  @Roles('ADMIN')
+  deleteDiscount(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUuidPipe) id: string) {
+    return this.billing.deleteDiscountCode(user, id);
   }
 }
 

@@ -80,6 +80,12 @@ export class CreateInvoiceDto {
   @Min(2000)
   @Max(2100)
   periodYear?: number;
+
+  /** Active discount code ("khuyến mãi") resolved at creation time. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  discountCode?: string;
 }
 
 export class ListInvoicesQueryDto extends PageDto {

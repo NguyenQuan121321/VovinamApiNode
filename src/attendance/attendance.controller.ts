@@ -8,6 +8,7 @@ import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 import { AttendanceService } from './attendance.service';
 import {
   AttendanceHistoryQueryDto,
+  AttendanceReportQueryDto,
   AttendanceSummaryQueryDto,
   BulkAttendanceRecordsDto,
   CreateAttendanceSessionDto,
@@ -55,5 +56,15 @@ export class AttendanceController {
   @Get('attendance/summary')
   summary(@CurrentUser() user: AuthenticatedUser, @Query() query: AttendanceSummaryQueryDto) {
     return this.attendance.summary(user, query);
+  }
+
+  /** Club/class attendance report for one month (matrix row 26). */
+  @Get('admin/reports/attendance')
+  @Roles('ADMIN', 'INSTRUCTOR')
+  monthlyReport(@CurrentUser() user: AuthenticatedUser, @Query() query: AttendanceReportQueryDto) {
+    const parts = query.month.split('-');
+    const year = Number.parseInt(parts[0] ?? '', 10);
+    const month = Number.parseInt(parts[1] ?? '', 10);
+    return this.attendance.monthlyReport(user, month, year);
   }
 }

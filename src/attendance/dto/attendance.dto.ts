@@ -67,3 +67,9 @@ export class AttendanceSummaryQueryDto {
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
   month!: string;
 }
+
+export class AttendanceReportQueryDto {
+  /** Month bucket YYYY-MM for the report window. */
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
+  month!: string;
+}

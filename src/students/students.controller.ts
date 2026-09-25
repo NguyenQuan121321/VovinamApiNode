@@ -16,7 +16,12 @@ import { Roles } from '../auth/guards/roles.decorator';
 import { CurrentUser } from '../auth/guards/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import { StudentsService } from './students.service';
-import { CreateStudentDto, ListStudentsQueryDto, UpdateStudentDto } from './dto/students.dto';
+import {
+  CreateStudentDto,
+  ListStudentsQueryDto,
+  UpdateOwnStudentDto,
+  UpdateStudentDto,
+} from './dto/students.dto';
 import { ParseUuidPipe } from '../common/parse-uuid.pipe';
 
 @Controller('students')
@@ -29,6 +34,13 @@ export class StudentsController {
   @Roles('STUDENT')
   me(@CurrentUser() user: AuthenticatedUser) {
     return this.students.myProfile(user);
+  }
+
+  /** STUDENT self-service contact edit (matrix row 4, E*). Must precede the :id route. */
+  @Patch('me')
+  @Roles('STUDENT')
+  updateOwn(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateOwnStudentDto) {
+    return this.students.updateOwn(user, dto);
   }
 
   @Get()

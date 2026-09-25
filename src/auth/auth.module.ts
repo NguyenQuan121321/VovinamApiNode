@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth.controller';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
 import { AuthService } from './auth.service';
 import { TokenService } from './domain/token.service';
 import { RefreshTokenService } from './domain/refresh-token.service';
@@ -15,9 +17,10 @@ import { EnvService } from '../config/env.service';
 import { APP_LOGGER } from '../logging/pino-logger.factory';
 
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, AdminUsersController],
   providers: [
     AuthService,
+    AdminUsersService,
     TokenService,
     RefreshTokenService,
     AuditService,

@@ -26,6 +26,9 @@ import { ParentsModule } from './parents/parents.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ConsentModule } from './consent/consent.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { LeavesModule } from './leaves/leaves.module';
+import { PromotionsModule } from './promotions/promotions.module';
+import { EvaluationsModule } from './evaluations/evaluations.module';
 
 @Module({
   imports: [
@@ -53,6 +56,9 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     NotificationsModule,
     ConsentModule,
     AnnouncementsModule,
+    LeavesModule,
+    PromotionsModule,
+    EvaluationsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

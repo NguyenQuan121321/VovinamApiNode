@@ -131,3 +131,31 @@ export class LinkChildDto {
   @Length(8, 8)
   inviteCode!: string;
 }
+
+/** Self-service contact edit (matrix row 4, E*): identity fields stay admin-managed. */
+export class UpdateOwnStudentDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  emergencyContactName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  emergencyContactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  medicalNotes?: string;
+}

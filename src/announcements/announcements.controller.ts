@@ -34,22 +34,30 @@ export class AnnouncementsController {
     return this.announcements.list(user, query);
   }
 
+  /** ADMIN posts club-wide; INSTRUCTOR posts class-scoped to own classes (row 24). */
   @Post('announcements')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'INSTRUCTOR')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAnnouncementDto) {
     return this.announcements.create(user, dto);
   }
 
   @Patch('announcements/:id')
-  @Roles('ADMIN')
-  update(@Param('id', ParseUuidPipe) id: string, @Body() dto: UpdateAnnouncementDto) {
-    return this.announcements.update(id, dto);
+  @Roles('ADMIN', 'INSTRUCTOR')
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+    @Body() dto: UpdateAnnouncementDto,
+  ) {
+    return this.announcements.update(user, id, dto);
   }
 
   @Delete('announcements/:id')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'INSTRUCTOR')
   @HttpCode(200)
-  async remove(@Param('id', ParseUuidPipe) id: string): Promise<{ deleted: boolean }> {
-    return this.announcements.remove(id);
+  async remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+  ): Promise<{ deleted: boolean }> {
+    return this.announcements.remove(user, id);
   }
 }

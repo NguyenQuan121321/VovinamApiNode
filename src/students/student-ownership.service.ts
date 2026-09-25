@@ -61,4 +61,35 @@ export class StudentOwnershipService {
     }
     return false;
   }
+
+  /**
+   * Ids of the students whose data this caller may see — the list-scoping half of
+   * guard 7.3. Returns null for ADMIN (= unrestricted); every other role gets an
+   * explicit id set that list queries filter by.
+   */
+  async visibleStudentIds(caller: AuthenticatedUser): Promise<string[] | null> {
+    if (caller.role === 'ADMIN') {
+      return null;
+    }
+    if (caller.role === 'STUDENT') {
+      const profiles = await this.prisma.studentProfile.findMany({
+        where: { userId: caller.id, deletedAt: null },
+        select: { id: true },
+      });
+      return profiles.map((profile) => profile.id);
+    }
+    if (caller.role === 'PARENT') {
+      const links = await this.prisma.parentStudentLink.findMany({
+        where: { parentUserId: caller.id, verified: true, student: { deletedAt: null } },
+        select: { studentId: true },
+      });
+      return links.map((link) => link.studentId);
+    }
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { leftAt: null, class: { instructorId: caller.id } },
+      select: { studentId: true },
+      distinct: ['studentId'],
+    });
+    return enrollments.map((enrollment) => enrollment.studentId);
+  }
 }
