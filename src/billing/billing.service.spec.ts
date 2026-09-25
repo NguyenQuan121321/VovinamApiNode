@@ -100,7 +100,7 @@ describe('BillingService', () => {
   beforeEach(() => {
     prisma = makePrismaMock();
     ({ service, auditRecord } = makeService(prisma));
-    prisma.invoice.findFirst.mockResolvedValue({ invoiceNo: 'INV-2026-0007' });
+    prisma.invoice.findMany.mockResolvedValue([{ invoiceNo: 'INV-2026-0007' }]);
     prisma.invoice.create.mockImplementation(
       ({ data }: { data: { invoiceNo: string; total: number } }) =>
         Promise.resolve({
@@ -555,7 +555,7 @@ describe('BillingService', () => {
         status: 'ACTIVE',
         user: null,
       });
-      prisma.invoice.findFirst.mockResolvedValue({ invoiceNo: 'INV-2026-0009' });
+      prisma.invoice.findMany.mockResolvedValue([{ invoiceNo: 'INV-2026-0009' }]);
       prisma.invoice.create.mockResolvedValue({ ...invoice, invoiceNo: 'INV-2026-0009' });
       prisma.discountCode.findUnique.mockResolvedValue(codeRow);
 

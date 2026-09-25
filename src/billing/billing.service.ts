@@ -8,6 +8,7 @@ import { Invoice, InvoiceItem, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
 import { NotificationOutboxService } from '../notifications/notification-outbox.service';
+import { nextSequentialCode } from './sequential-code';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import type { CreateInvoiceDto, GenerateMonthlyDto, ListInvoicesQueryDto } from './dto/billing.dto';
 import type { CreateDiscountCodeDto, UpdateDiscountCodeDto } from './dto/settings.dto';
@@ -102,13 +103,15 @@ export class BillingService {
   /** Sequential INV-<year>-<NNNN>, guarded by the unique constraint (plan 9). */
   async nextInvoiceNo(tx: Tx, year: number): Promise<string> {
     const prefix = `INV-${year}-`;
-    const last = await tx.invoice.findFirst({
+    const rows = await tx.invoice.findMany({
       where: { invoiceNo: { startsWith: prefix } },
-      orderBy: { invoiceNo: 'desc' },
       select: { invoiceNo: true },
     });
-    const seq = last === null ? 1 : Number.parseInt(last.invoiceNo.slice(prefix.length), 10) + 1;
-    return `${prefix}${String(seq).padStart(4, '0')}`;
+    return nextSequentialCode(
+      prefix,
+      rows.map((row) => row.invoiceNo),
+      4,
+    );
   }
 
   /**
@@ -203,50 +206,67 @@ export class BillingService {
       throw new BadRequestException('Discount cannot exceed the subtotal');
     }
     const dueDate = dto.dueDate === undefined ? this.defaultDueDate() : new Date(dto.dueDate);
-    const created = await this.prisma.$transaction(async (tx) => {
-      const invoice = await tx.invoice.create({
-        data: {
-          invoiceNo: await this.nextInvoiceNo(tx, new Date().getUTCFullYear()),
-          studentId: dto.studentId,
-          type: dto.type,
-          periodMonth: dto.periodMonth,
-          periodYear: dto.periodYear,
-          subtotal,
-          discount,
-          total: subtotal - discount,
-          status: 'UNPAID',
-          dueDate,
-          note: dto.note,
-          createdBy: caller.id,
-        },
-      });
-      await tx.invoiceItem.createMany({
-        data: dto.items.map((item) => ({
-          invoiceId: invoice.id,
-          description: item.description,
-          quantity: item.quantity,
-          unitAmount: item.unitAmount,
-          amount: item.quantity * item.unitAmount,
-        })),
-      });
-      // Outbox rows commit with the invoice in ONE transaction (plan 7.6): the
-      // notification exists exactly when the invoice exists, never before or after.
-      if (profile.user) {
-        const summary = `Invoice ${invoice.invoiceNo} (${dto.type}) issued — total ${invoice.total} VND, due ${dueDate.toISOString().slice(0, 10)}`;
-        await this.outbox.enqueueInApp(tx, {
-          userId: profile.user.id,
-          templateCode: 'invoice_issued',
-          payload: { message: summary },
+    // Bounded retry: a concurrent issuer computing the same invoice_no loses to
+    // the unique constraint and re-derives the sequence (plan 9).
+    let created!: Invoice;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        created = await this.prisma.$transaction(async (tx) => {
+          const invoice = await tx.invoice.create({
+            data: {
+              invoiceNo: await this.nextInvoiceNo(tx, new Date().getUTCFullYear()),
+              studentId: dto.studentId,
+              type: dto.type,
+              periodMonth: dto.periodMonth,
+              periodYear: dto.periodYear,
+              subtotal,
+              discount,
+              total: subtotal - discount,
+              status: 'UNPAID',
+              dueDate,
+              note: dto.note,
+              createdBy: caller.id,
+            },
+          });
+          await tx.invoiceItem.createMany({
+            data: dto.items.map((item) => ({
+              invoiceId: invoice.id,
+              description: item.description,
+              quantity: item.quantity,
+              unitAmount: item.unitAmount,
+              amount: item.quantity * item.unitAmount,
+            })),
+          });
+          // Outbox rows commit with the invoice in ONE transaction (plan 7.6): the
+          // notification exists exactly when the invoice exists, never before or after.
+          if (profile.user) {
+            const summary = `Invoice ${invoice.invoiceNo} (${dto.type}) issued — total ${invoice.total} VND, due ${dueDate.toISOString().slice(0, 10)}`;
+            await this.outbox.enqueueInApp(tx, {
+              userId: profile.user.id,
+              templateCode: 'invoice_issued',
+              payload: { message: summary },
+            });
+            await this.outbox.enqueue(tx, {
+              userId: profile.user.id,
+              channel: 'EMAIL',
+              templateCode: 'invoice_issued',
+              payload: { message: summary, email: profile.user.email },
+            });
+          }
+          return invoice;
         });
-        await this.outbox.enqueue(tx, {
-          userId: profile.user.id,
-          channel: 'EMAIL',
-          templateCode: 'invoice_issued',
-          payload: { message: summary, email: profile.user.email },
-        });
+        break;
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002' &&
+          attempt < 4
+        ) {
+          continue;
+        }
+        throw error;
       }
-      return invoice;
-    });
+    }
     this.audit.record({
       event: 'invoice_created',
       success: true,
