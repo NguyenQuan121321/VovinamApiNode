@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { BillingService, type Tx } from './billing.service';
 import { AuditService } from '../auth/audit/audit.service';
@@ -50,13 +50,23 @@ function makePrismaMock() {
       create: jest.fn(),
       count: jest.fn(),
       updateMany: jest.fn(),
+      groupBy: jest.fn(),
     },
     invoiceItem: { create: jest.fn(), createMany: jest.fn() },
     studentProfile: { findFirst: jest.fn() },
     parentStudentLink: { findMany: jest.fn(), findFirst: jest.fn() },
-    appSetting: { findUnique: jest.fn() },
+    appSetting: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
     enrollment: { findMany: jest.fn() },
     paymentTransaction: { findMany: jest.fn(), aggregate: jest.fn() },
+    class: { count: jest.fn() },
+    discountCode: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      count: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
 }
@@ -389,6 +399,196 @@ describe('BillingService', () => {
       await expect(
         service.revenue(admin, new Date('2026-10-01'), new Date('2026-12-31')),
       ).resolves.toMatchObject({ grandTotal: 777 });
+    });
+  });
+
+  describe('admin settings (matrix row 29)', () => {
+    it('reads the two business keys with safe defaults', async () => {
+      prisma.appSetting.findMany.mockResolvedValue([
+        { key: 'tuition_rates', value: { 'c-1': 400000 } },
+      ]);
+      await expect(service.getSettings()).resolves.toMatchObject({
+        tuitionRates: { 'c-1': 400000 },
+        bankAccount: null,
+      });
+    });
+
+    it('replaces tuition rates and rejects unknown or duplicated class ids', async () => {
+      prisma.appSetting.findMany.mockResolvedValue([]);
+      prisma.appSetting.upsert.mockResolvedValue({});
+      prisma.class.count.mockResolvedValue(1);
+      await service.updateTuitionRates(admin, [{ classId: 'c-1', monthlyAmount: 450000 }]);
+      expect(prisma.appSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { key: 'tuition_rates' } }),
+      );
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'settings_updated' }),
+      );
+
+      prisma.class.count.mockResolvedValue(0);
+      await expect(
+        service.updateTuitionRates(admin, [{ classId: 'nope', monthlyAmount: 1 }]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.updateTuitionRates(admin, [
+          { classId: 'c-1', monthlyAmount: 1 },
+          { classId: 'c-1', monthlyAmount: 2 },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('stores the bank account in the exact shape the QR guard reads', async () => {
+      prisma.appSetting.findMany.mockResolvedValue([]);
+      prisma.appSetting.upsert.mockResolvedValue({});
+      await service.updateBankAccount(admin, {
+        bin: '970422',
+        number: '0071000123456',
+        name: 'CLB VOVINAM',
+        ownerType: 'BUSINESS',
+      });
+      const call = prisma.appSetting.upsert.mock.calls[0]?.[0] as {
+        update: { value: Record<string, string> };
+      };
+      expect(call.update.value).toMatchObject({ owner_type: 'BUSINESS' });
+    });
+  });
+
+  describe('tuition report (matrix row 27)', () => {
+    it('aggregates status totals and collected amounts for one period', async () => {
+      prisma.invoice.groupBy.mockResolvedValue([
+        { status: 'UNPAID', _count: { _all: 2 }, _sum: { total: 800000 } },
+        { status: 'PAID', _count: { _all: 1 }, _sum: { total: 400000 } },
+      ]);
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: 400000 } });
+      await expect(service.tuitionReport(9, 2026)).resolves.toMatchObject({
+        month: 9,
+        year: 2026,
+        collectedVnd: 400000,
+      });
+      expect(prisma.invoice.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          by: ['status'],
+          where: expect.objectContaining({ type: 'TUITION' }),
+        }),
+      );
+    });
+  });
+
+  describe('discount codes (matrix row 23)', () => {
+    const codeRow = {
+      id: 'd-1',
+      code: 'E2E10',
+      description: '10% off',
+      percentOff: 10,
+      amountOff: null,
+      validFrom: new Date('2026-01-01'),
+      validUntil: new Date('2030-01-01'),
+      isActive: true,
+    };
+
+    it('creates a code and enforces the percent/amount XOR plus the window order', async () => {
+      prisma.discountCode.create.mockResolvedValue(codeRow);
+      await service.createDiscountCode(admin, {
+        code: 'e2e10',
+        percentOff: 10,
+        validFrom: new Date('2026-01-01'),
+        validUntil: new Date('2030-01-01'),
+      });
+      expect(prisma.discountCode.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ code: 'E2E10' }),
+      });
+
+      await expect(
+        service.createDiscountCode(admin, {
+          code: 'BOTH',
+          percentOff: 10,
+          amountOff: 50000,
+          validFrom: new Date('2026-01-01'),
+          validUntil: new Date('2030-01-01'),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.createDiscountCode(admin, {
+          code: 'NEITHER',
+          validFrom: new Date('2026-01-01'),
+          validUntil: new Date('2030-01-01'),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.createDiscountCode(admin, {
+          code: 'BACKWARDS',
+          percentOff: 10,
+          validFrom: new Date('2030-01-01'),
+          validUntil: new Date('2026-01-01'),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('maps a duplicate code to 409 and 404s unknown ids on update/delete', async () => {
+      prisma.discountCode.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('duplicate', {
+          code: 'P2002',
+          clientVersion: '6.12.0',
+        }),
+      );
+      await expect(
+        service.createDiscountCode(admin, {
+          code: 'E2E10',
+          percentOff: 10,
+          validFrom: new Date('2026-01-01'),
+          validUntil: new Date('2030-01-01'),
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      prisma.discountCode.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateDiscountCode(admin, 'nope', { isActive: false }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.deleteDiscountCode(admin, 'nope')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('applies an active percent code at invoice creation and rejects unusable codes', async () => {
+      prisma.studentProfile.findFirst.mockResolvedValue({
+        id: 'sp-1',
+        status: 'ACTIVE',
+        user: null,
+      });
+      prisma.invoice.findFirst.mockResolvedValue({ invoiceNo: 'INV-2026-0009' });
+      prisma.invoice.create.mockResolvedValue({ ...invoice, invoiceNo: 'INV-2026-0009' });
+      prisma.discountCode.findUnique.mockResolvedValue(codeRow);
+
+      await service.create(admin, {
+        studentId: 'sp-1',
+        type: 'UNIFORM',
+        items: [{ description: 'Uniform', quantity: 1, unitAmount: 500000 }],
+        discountCode: 'e2e10',
+      });
+      const created = prisma.invoice.create.mock.calls.at(-1)?.[0] as {
+        data: { discount: number };
+      };
+      expect(created.data.discount).toBe(50000);
+
+      prisma.discountCode.findUnique.mockResolvedValue({ ...codeRow, isActive: false });
+      await expect(
+        service.create(admin, {
+          studentId: 'sp-1',
+          type: 'OTHER',
+          items: [{ description: 'X', quantity: 1, unitAmount: 100000 }],
+          discountCode: 'E2E10',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      prisma.discountCode.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(admin, {
+          studentId: 'sp-1',
+          type: 'OTHER',
+          items: [{ description: 'X', quantity: 1, unitAmount: 100000 }],
+          discountCode: 'GHOST',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

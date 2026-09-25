@@ -32,6 +32,9 @@ describe('Matrix workflows (e2e)', () => {
   let invoiceId = '';
   let month = 1;
   let year = 2026;
+  let currentRank = { id: 0 };
+  let targetRank = { id: 0 };
+  let midRank = { id: 0 };
 
   const get = (url: string, token?: string) => {
     const req = request(app.getHttpServer()).get(url);
@@ -108,6 +111,35 @@ describe('Matrix workflows (e2e)', () => {
       })
     ).id;
 
+    // CI runs the e2e suite against a migrate-deploy-only database (no seed), so the
+    // suite creates its own rank ladder instead of relying on seeded catalog rows.
+    const rankBase =
+      (await prisma.beltRank.aggregate({ _max: { orderIndex: true } }))._max.orderIndex ?? 0;
+    currentRank = await prisma.beltRank.create({
+      data: {
+        code: `W${stamp}_1`,
+        name: 'Workflow White',
+        rankGroup: 'LAM',
+        orderIndex: rankBase + 1,
+      },
+    });
+    midRank = await prisma.beltRank.create({
+      data: {
+        code: `W${stamp}_2`,
+        name: 'Workflow Blue',
+        rankGroup: 'LAM',
+        orderIndex: rankBase + 2,
+      },
+    });
+    targetRank = await prisma.beltRank.create({
+      data: {
+        code: `W${stamp}_3`,
+        name: 'Workflow Yellow',
+        rankGroup: 'VANG',
+        orderIndex: rankBase + 3,
+      },
+    });
+
     studentProfileId = (
       await prisma.studentProfile.create({
         data: {
@@ -117,8 +149,7 @@ describe('Matrix workflows (e2e)', () => {
           gender: 'MALE',
           inviteCode: 'WKFLOW1',
           status: 'ACTIVE',
-          currentBeltRankId: (await prisma.beltRank.findFirstOrThrow({ where: { code: 'LAM_1' } }))
-            .id,
+          currentBeltRankId: currentRank.id,
         },
       })
     ).id;
@@ -264,11 +295,10 @@ describe('Matrix workflows (e2e)', () => {
   });
 
   it('promotion proposals: instructor proposes, admin approves (row 14)', async () => {
-    const vang1 = await prisma.beltRank.findFirstOrThrow({ where: { code: 'VANG_1' } });
     const created = await send(
       'post',
       '/api/v1/promotion-proposals',
-      { studentId: studentProfileId, proposedRankId: vang1.id, note: 'Technically ready' },
+      { studentId: studentProfileId, proposedRankId: targetRank.id, note: 'Technically ready' },
       instructorToken,
     ).expect(201);
     const proposalId = created.body.data.id as string;
@@ -276,15 +306,15 @@ describe('Matrix workflows (e2e)', () => {
     await send(
       'post',
       '/api/v1/promotion-proposals',
-      { studentId: studentProfileId, proposedRankId: vang1.id },
+      { studentId: studentProfileId, proposedRankId: targetRank.id },
       instructorToken,
     ).expect(409);
 
-    const lam2 = await prisma.beltRank.findFirstOrThrow({ where: { code: 'LAM_2' } });
+    // A rank at or below the student's current rank is not a promotion (409).
     await send(
       'post',
       '/api/v1/promotion-proposals',
-      { studentId: studentProfileId, proposedRankId: lam2.id },
+      { studentId: studentProfileId, proposedRankId: midRank.id },
       instructorToken,
     ).expect(409);
 

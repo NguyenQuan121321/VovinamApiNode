@@ -70,4 +70,15 @@ describe('HttpExceptionFilter', () => {
     expect(JSON.stringify(res.body)).not.toContain('hunter2');
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
+
+  it('falls back to the default message when the exception body message is not text', () => {
+    const res = makeResponse();
+    filter.catch(
+      new BadRequestException({ statusCode: 400, detail: 'internal-only' }),
+      makeHost(res),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ code: 400, message: 'Bad request', data: null });
+    expect(JSON.stringify(res.body)).not.toContain('internal-only');
+  });
 });

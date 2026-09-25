@@ -241,4 +241,32 @@ describe('AnnouncementsService', () => {
       expect(result.items[0]).toMatchObject({ id: 'a1', audience: 'ALL', className: null });
     });
   });
+
+  describe('instructor writes (matrix row 24)', () => {
+    it('a class author-instructor may re-target within their own class', async () => {
+      prisma.announcement.findUnique.mockResolvedValue({
+        ...row,
+        audience: 'CLASS',
+        classId: 'c1',
+        createdBy: 'instructor-1',
+      });
+      prisma.class.findFirst.mockResolvedValue({ id: 'c2' });
+      prisma.class.findUnique.mockResolvedValue({ id: 'c2' });
+      prisma.announcement.update.mockResolvedValue({ ...row, audience: 'CLASS', classId: 'c2' });
+      await service.update(instructor, 'a1', { classId: 'c2' });
+      expect(prisma.announcement.update).toHaveBeenCalled();
+    });
+
+    it('an instructor posting to a foreign class answers 404', async () => {
+      prisma.class.findFirst.mockResolvedValue(null);
+      await expect(
+        service.create(instructor, {
+          title: 'X',
+          body: 'Y',
+          audience: 'CLASS',
+          classId: 'foreign',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 });

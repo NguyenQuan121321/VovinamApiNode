@@ -143,4 +143,40 @@ describe('PromotionsService', () => {
       NotFoundException,
     );
   });
+
+  describe('create guards and list filters', () => {
+    it('answers 404 for an unknown student or an unknown/inactive rank', async () => {
+      prisma.studentProfile.findFirst.mockResolvedValue(null);
+      await expect(
+        service.create(instructorCaller, { studentId: 'sp-x', proposedRankId: 4 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      prisma.studentProfile.findFirst.mockResolvedValue({ id: 'sp-1', currentBeltRank: null });
+      prisma.beltRank.findFirst.mockResolvedValue(null);
+      await expect(
+        service.create(instructorCaller, { studentId: 'sp-1', proposedRankId: 99 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns an empty page when the caller can see no students', async () => {
+      ownership.visibleStudentIds.mockResolvedValue([]);
+      await expect(service.list(instructorCaller, { page: 1, limit: 20 })).resolves.toEqual({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+      });
+    });
+
+    it('applies status and student filters only when provided', async () => {
+      ownership.visibleStudentIds.mockResolvedValue(null);
+      await service.list(adminCaller, { page: 1, limit: 20 });
+      expect(prisma.promotionProposal.count).toHaveBeenCalledWith({ where: {} });
+
+      await service.list(adminCaller, { page: 1, limit: 20, status: 'PENDING', studentId: 'sp-1' });
+      expect(prisma.promotionProposal.count).toHaveBeenCalledWith({
+        where: { status: 'PENDING', studentId: 'sp-1' },
+      });
+    });
+  });
 });

@@ -247,12 +247,15 @@ jobs:
           npm run test:e2e > e2e-output.txt 2>&1
           EXIT=$?
           if [ "$EXIT" != "0" ]; then
-            # The output is small (~1KB); mirror every line into annotations so the
-            # failure is readable on the PR without Actions log access.
-            grep -v '^$' e2e-output.txt | head -45 | while IFS= read -r line; do
-              safe=$(printf '%s' "$line" | cut -c1-160)
-              echo "::error title=e2e::$safe"
-            done
+            echo "::group::e2e failure output (first 160 lines)"
+            sed -n '1,160p' e2e-output.txt
+            echo "::endgroup::"
+            # Emit up to 45 non-empty lines as annotations. awk exits itself at the
+            # cap — a grep|head pipeline would SIGPIPE-kill the loop mid-way.
+            awk 'NF { print substr($0, 1, 160); count++; if (count == 45) exit }' e2e-output.txt |
+              while IFS= read -r line; do
+                echo "::error title=e2e::$line"
+              done
           fi
           exit $EXIT
       - uses: actions/upload-artifact@v4

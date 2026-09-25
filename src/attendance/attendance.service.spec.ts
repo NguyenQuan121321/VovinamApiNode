@@ -49,8 +49,14 @@ const record = {
 
 function makePrismaMock() {
   return {
-    attendanceSession: { create: jest.fn(), findUnique: jest.fn() },
-    attendanceRecord: { upsert: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+    attendanceSession: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+    attendanceRecord: {
+      upsert: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      groupBy: jest.fn(),
+    },
+    class: { findMany: jest.fn() },
     enrollment: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -228,6 +234,62 @@ describe('AttendanceService', () => {
         gte: new Date(Date.UTC(2026, 8, 1)),
         lt: new Date(Date.UTC(2026, 9, 1)),
       });
+    });
+  });
+
+  describe('monthlyReport (matrix row 26)', () => {
+    it('aggregates per-class status totals for the admin; instructors see own classes', async () => {
+      prisma.class.findMany.mockResolvedValue([{ id: 'c-1', name: 'Co ban', status: 'ACTIVE' }]);
+      prisma.attendanceSession.findMany.mockResolvedValue([
+        { id: 's-1', classId: 'c-1' },
+        { id: 's-2', classId: 'c-1' },
+      ]);
+      prisma.attendanceRecord.groupBy.mockResolvedValue([
+        { status: 'PRESENT', attendanceSessionId: 's-1', _count: { _all: 3 } },
+        { status: 'ABSENT', attendanceSessionId: 's-2', _count: { _all: 1 } },
+      ]);
+      const rows = (await service.monthlyReport(admin, 9, 2026)) as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        classId: 'c-1',
+        sessionsHeld: 2,
+        PRESENT: 3,
+        ABSENT: 1,
+        attendanceRate: 75,
+      });
+
+      prisma.class.findMany.mockResolvedValue([]);
+      await expect(service.monthlyReport(admin, 9, 2026)).resolves.toEqual([]);
+    });
+  });
+
+  describe('monthlyReport branch coverage', () => {
+    it('counts LATE and EXCUSED into the rate and returns null for unmarked sessions', async () => {
+      prisma.class.findMany.mockResolvedValue([{ id: 'c-1', name: 'Co ban', status: 'ACTIVE' }]);
+      prisma.attendanceSession.findMany.mockResolvedValue([{ id: 's-1', classId: 'c-1' }]);
+      prisma.attendanceRecord.groupBy.mockResolvedValue([
+        { status: 'PRESENT', attendanceSessionId: 's-1', _count: { _all: 1 } },
+        { status: 'LATE', attendanceSessionId: 's-1', _count: { _all: 1 } },
+        { status: 'EXCUSED', attendanceSessionId: 's-1', _count: { _all: 2 } },
+      ]);
+      const rows = (await service.monthlyReport(admin, 9, 2026)) as Array<Record<string, unknown>>;
+      // present+late over marked: 2/4 = 50%.
+      expect(rows[0]).toMatchObject({ LATE: 1, EXCUSED: 2, attendanceRate: 50 });
+
+      prisma.attendanceRecord.groupBy.mockResolvedValue([]);
+      const empty = (await service.monthlyReport(admin, 9, 2026)) as Array<Record<string, unknown>>;
+      expect(empty[0]).toMatchObject({ markedRecords: 0, attendanceRate: null });
+    });
+
+    it('scopes the instructor to their own classes', async () => {
+      const instructor = { id: 'inst-1', role: 'INSTRUCTOR', sessionId: 's', jti: 'j' } as never;
+      prisma.class.findMany.mockResolvedValue([]);
+      await service.monthlyReport(instructor, 9, 2026);
+      expect(prisma.class.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ instructorId: 'inst-1' }),
+        }),
+      );
     });
   });
 });

@@ -12,6 +12,7 @@ const studentCaller: AuthenticatedUser = {
   sessionId: 's',
   jti: 'j',
 };
+const adminCaller: AuthenticatedUser = { id: 'admin-1', role: 'ADMIN', sessionId: 's', jti: 'j' };
 const instructorCaller: AuthenticatedUser = {
   id: 'instructor-1',
   role: 'INSTRUCTOR',
@@ -186,6 +187,51 @@ describe('LeavesService', () => {
     expect(where.where).toMatchObject({
       studentId: { in: ['sp1'] },
       class: { instructorId: 'instructor-1' },
+    });
+  });
+
+  describe('list scoping and cancel branches', () => {
+    it('returns an empty page when the caller can see no students', async () => {
+      ownership.visibleStudentIds.mockResolvedValue([]);
+      await expect(service.list(studentCaller, { page: 1, limit: 20 })).resolves.toEqual({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+      });
+      expect(prisma.leaveRequest.findMany).not.toHaveBeenCalled();
+    });
+
+    it('applies status, class and student filters only when provided', async () => {
+      ownership.visibleStudentIds.mockResolvedValue(null); // admin: unrestricted
+      await service.list(adminCaller, { page: 1, limit: 20 });
+      expect(prisma.leaveRequest.count).toHaveBeenCalledWith({ where: {} });
+
+      await service.list(adminCaller, {
+        page: 1,
+        limit: 20,
+        status: 'PENDING',
+        classId: 'c-1',
+        studentId: 'sp-1',
+      });
+      expect(prisma.leaveRequest.count).toHaveBeenCalledWith({
+        where: { status: 'PENDING', classId: 'c-1', studentId: 'sp-1' },
+      });
+    });
+
+    it('an admin may cancel any pending request; unknown ids 404', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue({
+        ...row,
+        requestedByUserId: 'someone-else',
+        student: { userId: null },
+      });
+      prisma.leaveRequest.update.mockResolvedValue({ ...row, status: 'CANCELLED' });
+      await expect(service.cancel(adminCaller, 'lr1')).resolves.toMatchObject({
+        status: 'CANCELLED',
+      });
+
+      prisma.leaveRequest.findUnique.mockResolvedValue(null);
+      await expect(service.cancel(adminCaller, 'nope')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

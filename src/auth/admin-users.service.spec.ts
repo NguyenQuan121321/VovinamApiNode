@@ -146,4 +146,87 @@ describe('AdminUsersService', () => {
       expect.objectContaining({ orderBy: { id: 'desc' } }),
     );
   });
+
+  describe('list filters and trust-change branches', () => {
+    it('builds role and search filters only when provided', async () => {
+      await service.list({ page: 1, limit: 20 });
+      expect(prisma.user.count).toHaveBeenCalledWith({ where: { deletedAt: null } });
+
+      await service.list({ page: 1, limit: 20, role: 'INSTRUCTOR', search: 'coach' });
+      expect(prisma.user.count).toHaveBeenCalledWith({
+        where: {
+          deletedAt: null,
+          role: 'INSTRUCTOR',
+          email: { contains: 'coach', mode: 'insensitive' },
+        },
+      });
+
+      await service.list({ page: 1, limit: 20, role: 'STUDENT', search: '' });
+      expect(prisma.user.count).toHaveBeenCalledWith({
+        where: { deletedAt: null, role: 'STUDENT' },
+      });
+    });
+
+    it('a password-only update changes trust; an activation-only update does not', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'u-1', email: 'u@example.com' });
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'u-1',
+        email: 'u@example.com',
+        role: 'STUDENT',
+      });
+      prisma.user.update.mockResolvedValue({
+        id: 'u-1',
+        email: 'u@example.com',
+        role: 'STUDENT',
+        emailVerifiedAt: new Date(),
+        isActive: true,
+        deletedAt: null,
+        createdAt: new Date(),
+      });
+
+      await service.update(caller, 'u-1', { newPassword: 'Str0ngPass' });
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ pwdVersion: { increment: 1 } }),
+        }),
+      );
+      expect(prisma.session.updateMany).toHaveBeenCalled();
+
+      jest.clearAllMocks();
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'u-1',
+        email: 'u@example.com',
+        role: 'STUDENT',
+      });
+      prisma.user.update.mockResolvedValue({
+        id: 'u-1',
+        email: 'u@example.com',
+        role: 'STUDENT',
+        emailVerifiedAt: new Date(),
+        isActive: true,
+        deletedAt: null,
+        createdAt: new Date(),
+      });
+      await service.update(caller, 'u-1', { isActive: true });
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isActive: true } }),
+      );
+      expect(prisma.session.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects an update with no fields and a policy-violating password', async () => {
+      await expect(service.update(caller, 'u-1', {})).rejects.toBeInstanceOf(BadRequestException);
+      prisma.user.findUnique.mockResolvedValue({ id: 'u-1', email: 'u@example.com' });
+      await expect(
+        service.update(caller, 'u-1', { newPassword: 'u@example.com1' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('filters the audit log by user and event', async () => {
+      await service.listAuditLog({ page: 1, limit: 20, userId: 'u-9', event: 'login' });
+      expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'u-9', event: 'login' } }),
+      );
+    });
+  });
 });

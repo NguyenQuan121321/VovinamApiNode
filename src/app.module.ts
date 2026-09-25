@@ -69,6 +69,9 @@ import { EvaluationsModule } from './evaluations/evaluations.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware, MetricsMiddleware).forRoutes('*');
+    // Named wildcard (Nest 11 / path-to-regexp v8): the legacy bare '*' is
+    // auto-converted with a warning per boot. The request-id and metrics
+    // middleware must wrap every route, including the prefix-less ops probes.
+    consumer.apply(RequestIdMiddleware, MetricsMiddleware).forRoutes('{*splat}');
   }
 }

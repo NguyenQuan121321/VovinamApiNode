@@ -9,6 +9,14 @@ describe('Billing and payments controllers', () => {
     create: jest.fn().mockResolvedValue({ id: 'inv-1' }),
     generateMonthly: jest.fn().mockResolvedValue({ created: 1 }),
     revenue: jest.fn().mockResolvedValue({ rows: [] }),
+    tuitionReport: jest.fn().mockResolvedValue({ month: 9, year: 2026, collectedVnd: 0 }),
+    getSettings: jest.fn().mockResolvedValue({ tuitionRates: {}, bankAccount: null }),
+    updateTuitionRates: jest.fn().mockResolvedValue({ tuitionRates: {} }),
+    updateBankAccount: jest.fn().mockResolvedValue({ bankAccount: {} }),
+    listDiscountCodes: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+    createDiscountCode: jest.fn().mockResolvedValue({ id: 'd-1' }),
+    updateDiscountCode: jest.fn().mockResolvedValue({ id: 'd-1' }),
+    deleteDiscountCode: jest.fn().mockResolvedValue({ deleted: true }),
   };
   const payments = {
     createQrPayment: jest.fn().mockResolvedValue({ orderRef: 'VVABCD2345' }),
@@ -100,6 +108,50 @@ describe('Billing and payments controllers', () => {
       invoiceId: '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
     });
     expect(payments.listForInvoice).toHaveBeenCalledWith(
+      user,
+      '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
+    );
+  });
+
+  it('delegates settings, tuition report, and discount-code routes', async () => {
+    await billingController.getSettings();
+    expect(billing.getSettings).toHaveBeenCalled();
+
+    const rates = [{ classId: '3f2504e0-4f89-11d3-9a0c-0305e82c3301', monthlyAmount: 400000 }];
+    await billingController.updateTuitionRates(user, { rates });
+    expect(billing.updateTuitionRates).toHaveBeenCalledWith(user, rates);
+
+    await billingController.updateBankAccount(user, {
+      bankAccount: { bin: '970422', number: '0071000123456', name: 'CLB', ownerType: 'BUSINESS' },
+    });
+    expect(billing.updateBankAccount).toHaveBeenCalled();
+
+    await billingController.tuitionReport({ month: 9, year: 2026 });
+    expect(billing.tuitionReport).toHaveBeenCalledWith(9, 2026);
+
+    await billingController.listDiscounts({ page: 1, limit: 20 });
+    expect(billing.listDiscountCodes).toHaveBeenCalledWith(1, 20);
+
+    const discountDto = {
+      code: 'E2E10',
+      percentOff: 10,
+      validFrom: new Date('2026-01-01'),
+      validUntil: new Date('2030-01-01'),
+    };
+    await billingController.createDiscount(user, discountDto);
+    expect(billing.createDiscountCode).toHaveBeenCalledWith(user, discountDto);
+
+    await billingController.updateDiscount(user, '3f2504e0-4f89-11d3-9a0c-0305e82c3301', {
+      isActive: false,
+    });
+    expect(billing.updateDiscountCode).toHaveBeenCalledWith(
+      user,
+      '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
+      { isActive: false },
+    );
+
+    await billingController.deleteDiscount(user, '3f2504e0-4f89-11d3-9a0c-0305e82c3301');
+    expect(billing.deleteDiscountCode).toHaveBeenCalledWith(
       user,
       '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
     );
