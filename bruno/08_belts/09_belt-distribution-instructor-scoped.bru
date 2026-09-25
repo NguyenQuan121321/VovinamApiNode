@@ -1,0 +1,19 @@
+meta {
+  name: belt distribution (instructor scoped)
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/reports/belts
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

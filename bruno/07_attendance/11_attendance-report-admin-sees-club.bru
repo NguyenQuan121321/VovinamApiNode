@@ -1,0 +1,25 @@
+meta {
+  name: attendance report (admin sees club)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/reports/attendance?month={{curYear}}-{{curMonthPadded}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  const row = res.body.data.find(function(r){ return r.classId === bru.getEnvVar("basicClassId"); });
+  if(row) bru.setEnvVar("reportRate", row.attendanceRate);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("rows include the basic class", function() { expect(res.body.data.some(function(r){ return r.classId === bru.getEnvVar("basicClassId"); })).to.equal(true); });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: parent cannot request for an unlinked student
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "00000000-0000-4000-8000-000000000000", "classId": "{{basicClassId}}", "sessionDate": "2026-09-26", "reason": "x"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

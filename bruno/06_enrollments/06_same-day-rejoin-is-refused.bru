@@ -1,0 +1,28 @@
+meta {
+  name: same-day rejoin is refused
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/enrollments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{newStudentId}}", "classId": "{{newClassId}}"}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}
+
+docs {
+  Plan 6: UQ(student, class, enrolled_at::date) — rejoining is allowed on a later day only.
+}

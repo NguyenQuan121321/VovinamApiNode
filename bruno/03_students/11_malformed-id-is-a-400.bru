@@ -1,0 +1,19 @@
+meta {
+  name: malformed id is a 400
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/not-a-uuid
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: foreign instructor cannot open a session (404 posture)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/attendance-sessions
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"classId": "{{basicClassId}}", "sessionDate": "2027-01-04"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

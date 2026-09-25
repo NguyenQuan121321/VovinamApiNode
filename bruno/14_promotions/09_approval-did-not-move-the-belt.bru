@@ -1,0 +1,24 @@
+meta {
+  name: approval did NOT move the belt
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("belt unchanged by proposal approval", function() { expect(String(res.body.data.currentBeltRankId)).to.equal(bru.getEnvVar("beltBeforeProposal")); });
+}
+
+docs {
+  Key matrix invariant: only an exam RESULT_PASS changes the actual belt; proposals are advisory.
+}

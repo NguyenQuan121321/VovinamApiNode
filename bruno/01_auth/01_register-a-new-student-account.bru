@@ -1,0 +1,28 @@
+meta {
+  name: register a new student account
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "uat-registrant@example.com", "password": "UatRegistrant#2026", "role": "STUDENT", "fullName": "UAT Registrant", "dateOfBirth": "2006-03-12"}
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("response asks for verification", function() { expect(res.body.data.requiresVerification).to.equal(true); });
+}
+
+docs {
+  New accounts are unverified; the verification mail contains a token that only the mailbox can read.
+}

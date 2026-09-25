@@ -1,0 +1,24 @@
+meta {
+  name: capacity wall: first seat taken
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams/{{fullExamId}}/register
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}"}
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

@@ -1,0 +1,20 @@
+meta {
+  name: monthly summary
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/attendance/summary?studentId={{studentId}}&month={{curYear}}-{{curMonthPadded}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("counts add up", function() { var d=res.body.data; expect(d.PRESENT+d.LATE+d.ABSENT+d.EXCUSED).to.equal(d.total); });
+}

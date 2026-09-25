@@ -1,0 +1,28 @@
+meta {
+  name: instructor cannot review proposals (master only)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/promotion-proposals/{{proposalId}}/review
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "APPROVED"}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}
+
+docs {
+  The route is ADMIN-only (RolesGuard answers 403); a foreign-id attempt by an admin persona would answer the uniform 404.
+}

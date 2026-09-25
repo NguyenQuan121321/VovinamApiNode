@@ -1,0 +1,24 @@
+meta {
+  name: instructor cannot target a foreign class
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "Foreign", "body": "nope", "audience": "CLASS", "classId": "{{basicClassId}}"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

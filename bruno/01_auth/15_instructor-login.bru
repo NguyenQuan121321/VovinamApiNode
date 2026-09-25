@@ -1,0 +1,29 @@
+meta {
+  name: instructor login
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "{{instructorEmail}}", "password": "{{demoPassword}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("instructorToken", data.tokens.accessToken);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("role INSTRUCTOR", function() { expect(res.body.data.user.role).to.equal("INSTRUCTOR"); });
+}

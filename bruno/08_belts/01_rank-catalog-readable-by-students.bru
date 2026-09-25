@@ -1,0 +1,29 @@
+meta {
+  name: rank catalog readable by students
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/belt-ranks
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+script:post-response {
+  bru.setEnvVar("beltRanks", JSON.stringify(res.body.data));
+  var lam2 = res.body.data.find(function(r){ return r.code === "LAM_2"; });
+  var vang1 = res.body.data.find(function(r){ return r.code === "VANG_1"; });
+  if(lam2) bru.setEnvVar("lam2Id", String(lam2.id));
+  if(vang1) bru.setEnvVar("vang1Id", String(vang1.id));
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("ranks ordered by orderIndex", function() { var orders=res.body.data.map(function(r){return r.orderIndex;});
+for(var i=1;i<orders.length;i++){ expect(orders[i]).to.be.above(orders[i-1]); } });
+}

@@ -1,0 +1,20 @@
+meta {
+  name: payment history of an invoice
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/v1/payments?invoiceId={{manualInvoiceId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("cash payment listed", function() { expect(res.body.data.items.length).to.be.at.least(1); });
+}

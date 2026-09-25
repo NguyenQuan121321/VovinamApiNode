@@ -1,0 +1,24 @@
+meta {
+  name: schedule end before start is rejected
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classes/{{newClassId}}/schedules
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"weekday": 6, "startTime": "10:00", "endTime": "09:00", "effectiveFrom": "2026-01-01"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

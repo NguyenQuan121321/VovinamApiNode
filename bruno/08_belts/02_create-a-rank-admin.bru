@@ -1,0 +1,29 @@
+meta {
+  name: create a rank (admin)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-ranks
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"code": "UAT_X1", "name": "UAT Rank", "rankGroup": "DO", "orderIndex": 999}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("newRankId", String(data.id));
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

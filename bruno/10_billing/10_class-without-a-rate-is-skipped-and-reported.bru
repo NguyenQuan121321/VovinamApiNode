@@ -1,0 +1,25 @@
+meta {
+  name: class without a rate is skipped and reported
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/billing/generate-monthly
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"month": 1, "year": 2027, "classIds": ["{{smallClassId}}"]}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("skip reason surfaced", function() { expect(res.body.data.classesSkipped[0].reason).to.contain("no tuition rate"); });
+}

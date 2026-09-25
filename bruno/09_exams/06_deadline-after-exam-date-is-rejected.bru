@@ -1,0 +1,24 @@
+meta {
+  name: deadline after exam date is rejected
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "Bad order", "examDate": "2027-06-01", "targetRankId": "{{vang1Id}}", "feeAmount": 100000, "registrationDeadline": "2027-06-30"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

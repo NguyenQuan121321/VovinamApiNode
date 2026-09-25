@@ -1,0 +1,19 @@
+meta {
+  name: author deletes the evaluation
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/evaluations/{{evaluationId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

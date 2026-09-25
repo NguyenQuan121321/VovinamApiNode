@@ -1,0 +1,29 @@
+meta {
+  name: parent registers linked child
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams/{{passExamId}}/register
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{minorBId}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("minorBRegId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

@@ -1,0 +1,28 @@
+meta {
+  name: student grants a second purpose
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/consent
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"purpose": "DATA_PROCESSING"}
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}
+
+docs {
+  A second purpose creates a second history row (append-only ledger).
+}

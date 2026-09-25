@@ -1,0 +1,19 @@
+meta {
+  name: parent cannot read unlinked student evaluations
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/evaluations?studentId=00000000-0000-4000-8000-000000000000
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

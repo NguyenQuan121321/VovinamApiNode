@@ -1,0 +1,31 @@
+meta {
+  name: create a second instructor
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"email": "uat-instructor2@example.com", "password": "UatInstr#2026", "role": "INSTRUCTOR", "fullName": "UAT Instructor Two"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("instructor2Id", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("verified instructor account", function() { expect(res.body.data.role).to.equal("INSTRUCTOR");
+expect(res.body.data.emailVerified).to.equal(true); });
+}

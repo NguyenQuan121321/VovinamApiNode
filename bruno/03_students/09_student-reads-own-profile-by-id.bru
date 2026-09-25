@@ -1,0 +1,19 @@
+meta {
+  name: student reads own profile by id
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/{{studentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

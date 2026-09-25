@@ -1,0 +1,29 @@
+meta {
+  name: admin posts to the basic class
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "UAT class notice", "body": "Bring sparring gear", "audience": "CLASS", "classId": "{{basicClassId}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("classAnnouncementId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

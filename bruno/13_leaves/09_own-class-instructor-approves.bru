@@ -1,0 +1,26 @@
+meta {
+  name: own-class instructor approves
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests/{{leaveId}}/review
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "APPROVED", "note": "enjoy the event"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("approved with note", function() { expect(res.body.data.status).to.equal("APPROVED");
+expect(res.body.data.reviewedAt).to.not.equal(null); });
+}

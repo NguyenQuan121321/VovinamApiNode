@@ -1,0 +1,21 @@
+meta {
+  name: mfa methods shows totp enabled
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/v1/auth/mfa/methods
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("totp enabled", function() { expect(res.body.data[0].type).to.equal("totp");
+expect(res.body.data[0].enabled).to.equal(true); });
+}

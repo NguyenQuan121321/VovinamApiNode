@@ -1,0 +1,20 @@
+meta {
+  name: tuition close report
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/reports/tuition?month=9&year=2026
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("status buckets present", function() { expect(res.body.data.byStatus).to.be.an("array"); });
+}

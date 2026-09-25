@@ -1,0 +1,24 @@
+meta {
+  name: leave for a class the student is not enrolled in
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "classId": "{{advancedClassId}}", "sessionDate": "2026-09-26", "reason": "not enrolled"}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

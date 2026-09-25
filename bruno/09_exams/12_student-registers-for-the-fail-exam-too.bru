@@ -1,0 +1,29 @@
+meta {
+  name: student registers for the FAIL exam too
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams/{{failExamId}}/register
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("failRegId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

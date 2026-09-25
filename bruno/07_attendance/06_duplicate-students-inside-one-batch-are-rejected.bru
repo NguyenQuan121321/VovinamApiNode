@@ -1,0 +1,24 @@
+meta {
+  name: duplicate students inside one batch are rejected
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/attendance-sessions/{{attendanceSessionId}}/records
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"records": [{"studentId": "{{studentId}}", "status": "PRESENT"}, {"studentId": "{{studentId}}", "status": "ABSENT"}]}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

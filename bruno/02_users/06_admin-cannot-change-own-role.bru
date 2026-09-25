@@ -1,0 +1,28 @@
+meta {
+  name: admin cannot change own role
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/{{adminUserId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"role": "STUDENT"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}
+
+docs {
+  Self role-change and self-deactivation are refused (trust protection).
+}

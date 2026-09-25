@@ -1,0 +1,20 @@
+meta {
+  name: healthz liveness
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/healthz
+  body: none
+  auth: none
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("process is alive", function() { expect(res.body.data.status).to.equal("ok"); });
+}
+
+docs {
+  Liveness: process up, never touches the database.
+}

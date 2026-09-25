@@ -1,0 +1,20 @@
+meta {
+  name: class detail with enrollment count
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classes/{{basicClassId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("activeEnrollmentCount present", function() { expect(res.body.data.activeEnrollmentCount).to.be.a("number"); });
+}

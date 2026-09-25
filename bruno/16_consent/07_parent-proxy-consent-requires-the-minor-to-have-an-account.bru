@@ -1,0 +1,28 @@
+meta {
+  name: parent proxy consent requires the minor to have an account
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/consent
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"purpose": "MEDIA_USAGE", "studentId": "{{minorBId}}"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}
+
+docs {
+  Minors without an account are an organizational consent matter (plan 7.1).
+}

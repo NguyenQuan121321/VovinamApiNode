@@ -1,0 +1,19 @@
+meta {
+  name: enrollments list as student is forbidden
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/enrollments
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}

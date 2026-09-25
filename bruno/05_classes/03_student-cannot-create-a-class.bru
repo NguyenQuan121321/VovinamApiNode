@@ -1,0 +1,24 @@
+meta {
+  name: student cannot create a class
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classes
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"name": "Hack", "instructorId": "00000000-0000-4000-8000-000000000000"}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}

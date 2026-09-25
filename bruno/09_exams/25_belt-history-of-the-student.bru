@@ -1,0 +1,21 @@
+meta {
+  name: belt history of the student
+  type: http
+  seq: 25
+}
+
+get {
+  url: {{baseUrl}}/api/v1/exam-registrations?studentId={{studentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("history lists both exams", function() { expect(res.body.data.total).to.be.at.least(2); });
+  test("target rank present on rows", function() { expect(res.body.data.items[0].targetRank.code).to.be.a("string"); });
+}

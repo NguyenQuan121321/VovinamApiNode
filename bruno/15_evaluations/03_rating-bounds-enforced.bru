@@ -1,0 +1,24 @@
+meta {
+  name: rating bounds enforced
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/evaluations
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "rating": 11}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: read billing settings
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/billing/settings
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("tuitionRateBefore", String(data.tuitionRates[bru.getEnvVar("basicClassId")]));
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("bank account configured by seed", function() { expect(res.body.data.bankAccount).to.not.equal(null); });
+}

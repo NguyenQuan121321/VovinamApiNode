@@ -1,0 +1,24 @@
+meta {
+  name: discount XOR: neither kind is rejected
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/api/v1/discounts
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"code": "UATBAD2", "validFrom": "2026-01-01T00:00:00.000Z", "validUntil": "2027-12-31T23:59:59.000Z"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

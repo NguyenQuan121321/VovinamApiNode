@@ -1,0 +1,25 @@
+meta {
+  name: student feed shows the invoice notification
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/notifications/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+script:post-response {
+  const inv = res.body.data.items.find(function(n){ return n.templateCode === "invoice_issued" && n.readAt === null; });
+  if(inv) bru.setEnvVar("notificationId", inv.id);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("at least one notification", function() { expect(res.body.data.items.length).to.be.at.least(1); });
+}

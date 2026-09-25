@@ -1,0 +1,24 @@
+meta {
+  name: author edits the note
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/promotion-proposals/{{proposalId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"note": "UAT ready (updated)"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: FAIL does not change the belt
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/exam-registrations/{{failRegId}}/result
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "RESULT_FAIL"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

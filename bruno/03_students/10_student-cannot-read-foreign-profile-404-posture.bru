@@ -1,0 +1,23 @@
+meta {
+  name: student cannot read foreign profile (404 posture)
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/{{instructor2Id}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}
+
+docs {
+  Ownership guard: foreign ids are indistinguishable from unknown ids.
+}

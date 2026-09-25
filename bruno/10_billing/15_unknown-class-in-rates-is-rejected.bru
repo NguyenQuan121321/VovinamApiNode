@@ -1,0 +1,24 @@
+meta {
+  name: unknown class in rates is rejected
+  type: http
+  seq: 15
+}
+
+put {
+  url: {{baseUrl}}/api/v1/admin/billing/settings/tuition-rates
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"rates": [{"classId": "00000000-0000-4000-8000-000000000000", "monthlyAmount": 1}]}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

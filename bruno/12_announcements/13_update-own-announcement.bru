@@ -1,0 +1,25 @@
+meta {
+  name: update own announcement
+  type: http
+  seq: 13
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/announcements/{{classAnnouncementId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"body": "Bring sparring gear (updated)"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("body updated", function() { expect(res.body.data.body).to.contain("updated"); });
+}

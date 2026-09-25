@@ -1,0 +1,19 @@
+meta {
+  name: QR on a PAID invoice is refused
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/payments/qr/{{tuitionInvoiceId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

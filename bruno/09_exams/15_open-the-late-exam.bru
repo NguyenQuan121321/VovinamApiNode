@@ -1,0 +1,24 @@
+meta {
+  name: open the late exam
+  type: http
+  seq: 15
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/belt-exams/{{lateExamId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "OPEN"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

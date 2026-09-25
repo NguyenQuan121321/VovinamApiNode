@@ -1,0 +1,24 @@
+meta {
+  name: instructor cannot edit others announcements
+  type: http
+  seq: 14
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/announcements/{{classAnnouncementId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"body": "hijack"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

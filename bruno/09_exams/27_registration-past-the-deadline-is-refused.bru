@@ -1,0 +1,24 @@
+meta {
+  name: registration past the deadline is refused
+  type: http
+  seq: 27
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams/{{lateExamId}}/register
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{minorBId}}"}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

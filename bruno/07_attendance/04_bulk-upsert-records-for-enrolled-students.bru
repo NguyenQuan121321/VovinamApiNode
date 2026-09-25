@@ -1,0 +1,25 @@
+meta {
+  name: bulk upsert records for enrolled students
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/attendance-sessions/{{attendanceSessionId}}/records
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"records": [{"studentId": "{{studentId}}", "status": "PRESENT"}, {"studentId": "{{minorBId}}", "status": "LATE", "note": "traffic"}]}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("two records upserted", function() { expect(res.body.data.length).to.equal(2); });
+}

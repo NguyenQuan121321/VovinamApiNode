@@ -1,0 +1,24 @@
+meta {
+  name: create an already-expired code
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/discounts
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"code": "UATOLD", "amountOff": 5000, "validFrom": "2024-01-01T00:00:00.000Z", "validUntil": "2025-01-01T00:00:00.000Z"}
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

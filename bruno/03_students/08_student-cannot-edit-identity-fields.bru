@@ -1,0 +1,28 @@
+meta {
+  name: student cannot edit identity fields
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/students/me
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"fullName": "Hacker Name"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}
+
+docs {
+  The whitelist rejects unknown/identity fields — mass assignment is impossible.
+}

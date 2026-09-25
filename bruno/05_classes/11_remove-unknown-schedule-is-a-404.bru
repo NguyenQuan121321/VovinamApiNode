@@ -1,0 +1,19 @@
+meta {
+  name: remove unknown schedule is a 404
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/classes/{{newClassId}}/schedules/00000000-0000-4000-8000-000000000000
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

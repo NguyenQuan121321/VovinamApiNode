@@ -1,0 +1,30 @@
+meta {
+  name: admin re-login now requires MFA
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "{{adminEmail}}", "password": "{{adminPassword}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("adminMfaToken", data.mfaToken);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("mfaRequired true", function() { expect(res.body.data.mfaRequired).to.equal(true); });
+  test("no tokens before verification", function() { expect(res.body.data.tokens).to.equal(undefined); });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: expired code is refused at invoice time
+  type: http
+  seq: 23
+}
+
+post {
+  url: {{baseUrl}}/api/v1/invoices
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "type": "OTHER", "items": [{"description": "x", "quantity": 1, "unitAmount": 100000}], "discountCode": "UATOLD"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

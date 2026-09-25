@@ -1,0 +1,29 @@
+meta {
+  name: admin creates a one-seat class for capacity tests
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classes
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"name": "UAT Small Class", "instructorId": "{{instructor2Id}}", "capacity": 1}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("smallClassId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

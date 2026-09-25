@@ -1,0 +1,24 @@
+meta {
+  name: class announcement requires a class
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "Bad", "body": "x", "audience": "CLASS"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

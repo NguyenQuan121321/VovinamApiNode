@@ -1,0 +1,24 @@
+meta {
+  name: reviewed proposal cannot be edited
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/promotion-proposals/{{proposalId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"note": "late edit"}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

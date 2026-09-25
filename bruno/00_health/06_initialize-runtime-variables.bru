@@ -1,0 +1,23 @@
+meta {
+  name: initialize runtime variables
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/healthz
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  bru.setEnvVar("curMonth", String(new Date().getUTCMonth() + 1));
+  bru.setEnvVar("curMonthPadded", ("0" + (new Date().getUTCMonth() + 1)).slice(-2));
+  bru.setEnvVar("curYear", String(new Date().getUTCFullYear()));
+  bru.setEnvVar("tomorrow", "2026-09-26");
+  bru.setEnvVar("yesterday", "2026-09-24");
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

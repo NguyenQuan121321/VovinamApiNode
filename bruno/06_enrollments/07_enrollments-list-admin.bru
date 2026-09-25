@@ -1,0 +1,19 @@
+meta {
+  name: enrollments list (admin)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/enrollments?classId={{basicClassId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

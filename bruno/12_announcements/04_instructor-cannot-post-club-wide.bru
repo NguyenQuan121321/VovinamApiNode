@@ -1,0 +1,24 @@
+meta {
+  name: instructor cannot post club-wide
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "Club wide", "body": "nope", "audience": "ALL"}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: student feed shows club and own-class posts
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/announcements
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("club-wide visible", function() { expect(res.body.data.items.some(function(a){ return a.id === bru.getEnvVar("clubAnnouncementId"); })).to.equal(true); });
+  test("own class visible", function() { expect(res.body.data.items.some(function(a){ return a.id === bru.getEnvVar("classAnnouncementId"); })).to.equal(true); });
+}

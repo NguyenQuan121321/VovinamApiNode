@@ -1,0 +1,24 @@
+meta {
+  name: records of non-enrolled student are rejected
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/attendance-sessions/{{attendanceSessionId}}/records
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"records": [{"studentId": "00000000-0000-4000-8000-000000000000", "status": "PRESENT"}]}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: author updates the evaluation
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/evaluations/{{evaluationId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"rating": 9}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("rating updated", function() { expect(res.body.data.rating).to.equal(9); });
+}

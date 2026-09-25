@@ -1,0 +1,19 @@
+meta {
+  name: admin deletes the advanced-class post
+  type: http
+  seq: 16
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/announcements/{{advancedAnnouncementId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

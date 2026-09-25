@@ -1,0 +1,19 @@
+meta {
+  name: metrics without token is rejected
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/metrics
+  body: none
+  auth: none
+}
+
+tests {
+  test("status 401", function() { expect(res.status).to.equal(401); });
+}
+
+docs {
+  Prometheus metrics require the METRICS_TOKEN bearer token.
+}

@@ -1,0 +1,29 @@
+meta {
+  name: admin creates the FAIL exam
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "UAT Exam FAIL", "examDate": "2027-06-30", "targetRankId": "{{vang1Id}}", "feeAmount": 150000, "registrationDeadline": "2027-06-20"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("failExamId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

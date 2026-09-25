@@ -1,0 +1,23 @@
+meta {
+  name: parent cannot read an unknown student
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/00000000-0000-4000-8000-000000000000
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}
+
+docs {
+  Foreign/unknown student ids answer the same uniform 404 (anti-probing).
+}
