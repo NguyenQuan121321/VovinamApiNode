@@ -378,6 +378,19 @@ describe('Matrix workflows (e2e)', () => {
       { rating: 9 },
       instructorToken,
     ).expect(200);
+
+    // A well-formed but unknown class id answers the uniform 404 instead of a
+    // raw FK violation (500) — regression for the classId validation.
+    await send(
+      'post',
+      '/api/v1/evaluations',
+      {
+        studentId: studentProfileId,
+        classId: '00000000-0000-4000-8000-000000000000',
+        rating: 7,
+      },
+      instructorToken,
+    ).expect(404);
   });
 
   it('discount codes: CRUD, validation, and application on invoices (row 23)', async () => {

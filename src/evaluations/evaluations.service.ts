@@ -69,6 +69,17 @@ export class EvaluationsService {
     if ((dto.periodMonth === undefined) !== (dto.periodYear === undefined)) {
       throw new BadRequestException('Period month and year must be given together');
     }
+    if (dto.classId !== undefined) {
+      // Validate before insert: an unknown class id would otherwise surface as
+      // a raw FK violation (500) instead of the uniform 404 posture.
+      const cls = await this.prisma.class.findFirst({
+        where: { id: dto.classId },
+        select: { id: true },
+      });
+      if (cls === null) {
+        throw new NotFoundException('Not found');
+      }
+    }
     try {
       const evaluation = await this.prisma.studentEvaluation.create({
         data: {
