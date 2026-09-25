@@ -569,6 +569,110 @@
         ]
       }
     },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "AdminUsersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      },
+      "post": {
+        "operationId": "AdminUsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "patch": {
+        "operationId": "AdminUsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminUsersController_deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-log": {
+      "get": {
+        "operationId": "AdminUsersController_auditLog",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
     "/api/v1/invoices": {
       "get": {
         "operationId": "BillingController_list",
@@ -656,6 +760,172 @@
       "get": {
         "operationId": "BillingController_revenue",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/admin/reports/tuition": {
+      "get": {
+        "operationId": "BillingController_tuitionReport",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/admin/billing/settings": {
+      "get": {
+        "operationId": "BillingController_getSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/admin/billing/settings/tuition-rates": {
+      "put": {
+        "operationId": "BillingController_updateTuitionRates",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTuitionRatesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/admin/billing/settings/bank-account": {
+      "put": {
+        "operationId": "BillingController_updateBankAccount",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBankAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/discounts": {
+      "get": {
+        "operationId": "BillingController_listDiscounts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      },
+      "post": {
+        "operationId": "BillingController_createDiscount",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDiscountCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/discounts/{id}": {
+      "patch": {
+        "operationId": "BillingController_updateDiscount",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDiscountCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      },
+      "delete": {
+        "operationId": "BillingController_deleteDiscount",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -796,6 +1066,28 @@
       "get": {
         "operationId": "StudentsController_me",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Students"
+        ]
+      },
+      "patch": {
+        "operationId": "StudentsController_updateOwn",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnStudentDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": ""
@@ -1319,6 +1611,20 @@
         ]
       }
     },
+    "/api/v1/admin/reports/attendance": {
+      "get": {
+        "operationId": "AttendanceController_monthlyReport",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
     "/api/v1/belt-ranks": {
       "get": {
         "operationId": "BeltsController_list",
@@ -1385,6 +1691,20 @@
         },
         "tags": [
           "Belts"
+        ]
+      }
+    },
+    "/api/v1/admin/reports/belts": {
+      "get": {
+        "operationId": "BeltReportsController_distribution",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "BeltReports"
         ]
       }
     },
@@ -1503,6 +1823,20 @@
         },
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exams"
+        ]
+      }
+    },
+    "/api/v1/exam-registrations": {
+      "get": {
+        "operationId": "ExamsController_listStudentRegistrations",
+        "parameters": [],
+        "responses": {
+          "200": {
             "description": ""
           }
         },
@@ -1756,6 +2090,313 @@
           "Announcements"
         ]
       }
+    },
+    "/api/v1/leave-requests": {
+      "post": {
+        "operationId": "LeavesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLeaveRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leaves"
+        ]
+      },
+      "get": {
+        "operationId": "LeavesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leaves"
+        ]
+      }
+    },
+    "/api/v1/leave-requests/{id}/review": {
+      "post": {
+        "operationId": "LeavesController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewLeaveRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leaves"
+        ]
+      }
+    },
+    "/api/v1/leave-requests/{id}/cancel": {
+      "post": {
+        "operationId": "LeavesController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leaves"
+        ]
+      }
+    },
+    "/api/v1/leave-requests/{id}": {
+      "delete": {
+        "operationId": "LeavesController_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leaves"
+        ]
+      }
+    },
+    "/api/v1/promotion-proposals": {
+      "post": {
+        "operationId": "PromotionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromotionProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promotions"
+        ]
+      },
+      "get": {
+        "operationId": "PromotionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promotions"
+        ]
+      }
+    },
+    "/api/v1/promotion-proposals/{id}": {
+      "patch": {
+        "operationId": "PromotionsController_updateNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promotions"
+        ]
+      }
+    },
+    "/api/v1/promotion-proposals/{id}/review": {
+      "post": {
+        "operationId": "PromotionsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promotions"
+        ]
+      }
+    },
+    "/api/v1/evaluations": {
+      "post": {
+        "operationId": "EvaluationsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvaluationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Evaluations"
+        ]
+      },
+      "get": {
+        "operationId": "EvaluationsController_listForStudent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Evaluations"
+        ]
+      }
+    },
+    "/api/v1/evaluations/{id}": {
+      "patch": {
+        "operationId": "EvaluationsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEvaluationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Evaluations"
+        ]
+      },
+      "delete": {
+        "operationId": "EvaluationsController_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Evaluations"
+        ]
+      }
     }
   },
   "info": {
@@ -1827,6 +2468,14 @@
         "type": "object",
         "properties": {}
       },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {}
+      },
       "CreateInvoiceDto": {
         "type": "object",
         "properties": {}
@@ -1835,11 +2484,31 @@
         "type": "object",
         "properties": {}
       },
+      "UpdateTuitionRatesDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateBankAccountDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateDiscountCodeDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateDiscountCodeDto": {
+        "type": "object",
+        "properties": {}
+      },
       "ConfirmCashDto": {
         "type": "object",
         "properties": {}
       },
       "PaymentOutcomeDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateOwnStudentDto": {
         "type": "object",
         "properties": {}
       },
@@ -1916,6 +2585,34 @@
         "properties": {}
       },
       "UpdateAnnouncementDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateLeaveRequestDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ReviewLeaveRequestDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreatePromotionProposalDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateProposalDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ReviewProposalDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateEvaluationDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateEvaluationDto": {
         "type": "object",
         "properties": {}
       }
