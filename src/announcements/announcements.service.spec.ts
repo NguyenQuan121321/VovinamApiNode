@@ -13,9 +13,10 @@ function makePrismaMock() {
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       deleteMany: jest.fn(),
     },
-    class: { findUnique: jest.fn() },
+    class: { findUnique: jest.fn(), findFirst: jest.fn() },
     $transaction: jest.fn(),
   };
 }
@@ -123,7 +124,7 @@ describe('AnnouncementsService', () => {
   describe('update', () => {
     it('answers 404 for an unknown announcement', async () => {
       prisma.announcement.findUnique.mockResolvedValue(null);
-      await expect(service.update('nope', { title: 'New' })).rejects.toBeInstanceOf(
+      await expect(service.update(admin, 'nope', { title: 'New' })).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -133,9 +134,10 @@ describe('AnnouncementsService', () => {
         ...row,
         audience: 'CLASS',
         classId: 'class-1',
+        createdBy: 'admin-1',
       });
       prisma.announcement.update.mockResolvedValue(row);
-      const result = await service.update('a1', { audience: 'ALL' });
+      const result = await service.update(admin, 'a1', { audience: 'ALL' });
       expect(result).toMatchObject({ audience: 'ALL', classId: null });
       expect(prisma.announcement.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ classId: null }) }),
@@ -147,9 +149,22 @@ describe('AnnouncementsService', () => {
         ...row,
         audience: 'CLASS',
         classId: 'c1',
+        createdBy: 'admin-1',
       });
       prisma.class.findUnique.mockResolvedValue(null);
-      await expect(service.update('a1', { classId: 'c2' })).rejects.toBeInstanceOf(
+      await expect(service.update(admin, 'a1', { classId: 'c2' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('a foreign instructor answers 404; the author-instructor may edit their own', async () => {
+      prisma.announcement.findUnique.mockResolvedValue({
+        ...row,
+        audience: 'CLASS',
+        classId: 'c1',
+        createdBy: 'other-instructor',
+      });
+      await expect(service.update(instructor, 'a1', { title: 'New' })).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -157,12 +172,22 @@ describe('AnnouncementsService', () => {
 
   describe('remove', () => {
     it('deletes and audits; unknown ids answer 404', async () => {
-      prisma.announcement.deleteMany.mockResolvedValue({ count: 1 });
-      await expect(service.remove('a1')).resolves.toEqual({ deleted: true });
+      prisma.announcement.findUnique.mockResolvedValue({ id: 'a1', createdBy: 'admin-1' });
+      prisma.announcement.delete.mockResolvedValue(row);
+      await expect(service.remove(admin, 'a1')).resolves.toEqual({ deleted: true });
       expect(auditRecord).toHaveBeenCalled();
 
-      prisma.announcement.deleteMany.mockResolvedValue({ count: 0 });
-      await expect(service.remove('nope')).rejects.toBeInstanceOf(NotFoundException);
+      prisma.announcement.findUnique.mockResolvedValue(null);
+      await expect(service.remove(admin, 'nope')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('an instructor may delete only their own announcement', async () => {
+      prisma.announcement.findUnique.mockResolvedValue({ id: 'a1', createdBy: 'instructor-1' });
+      prisma.announcement.delete.mockResolvedValue(row);
+      await expect(service.remove(instructor, 'a1')).resolves.toEqual({ deleted: true });
+
+      prisma.announcement.findUnique.mockResolvedValue({ id: 'a1', createdBy: 'admin-1' });
+      await expect(service.remove(instructor, 'a1')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -214,6 +239,34 @@ describe('AnnouncementsService', () => {
       );
       expect(result).toMatchObject({ total: 1, page: 2, limit: 5 });
       expect(result.items[0]).toMatchObject({ id: 'a1', audience: 'ALL', className: null });
+    });
+  });
+
+  describe('instructor writes (matrix row 24)', () => {
+    it('a class author-instructor may re-target within their own class', async () => {
+      prisma.announcement.findUnique.mockResolvedValue({
+        ...row,
+        audience: 'CLASS',
+        classId: 'c1',
+        createdBy: 'instructor-1',
+      });
+      prisma.class.findFirst.mockResolvedValue({ id: 'c2' });
+      prisma.class.findUnique.mockResolvedValue({ id: 'c2' });
+      prisma.announcement.update.mockResolvedValue({ ...row, audience: 'CLASS', classId: 'c2' });
+      await service.update(instructor, 'a1', { classId: 'c2' });
+      expect(prisma.announcement.update).toHaveBeenCalled();
+    });
+
+    it('an instructor posting to a foreign class answers 404', async () => {
+      prisma.class.findFirst.mockResolvedValue(null);
+      await expect(
+        service.create(instructor, {
+          title: 'X',
+          body: 'Y',
+          audience: 'CLASS',
+          classId: 'foreign',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

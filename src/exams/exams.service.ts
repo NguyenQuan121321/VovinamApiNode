@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import type {
   CreateBeltExamDto,
   ExamResultDto,
+  ListExamRegistrationsQueryDto,
   ListExamsQueryDto,
   RegisterExamDto,
   UpdateBeltExamDto,
@@ -366,6 +367,50 @@ export class ExamsService {
       capacity: exam.capacity,
       registrationDeadline: exam.registrationDeadline,
       status: exam.status,
+    };
+  }
+
+  /**
+   * Belt history for one student (matrix row 17): every exam registration with
+   * ranks and results, newest exam first. Guard 7.3 decides visibility; the
+   * RESULT_PASS rows in order are exactly the promotion timeline.
+   */
+  async listStudentRegistrations(
+    caller: AuthenticatedUser,
+    studentId: string,
+    query: ListExamRegistrationsQueryDto,
+  ): Promise<Record<string, unknown>> {
+    await this.ownership.assertCanAccess(caller, studentId);
+    const page = query.page ?? 1;
+    const limit = Math.min(query.limit ?? 20, 100);
+    const where = { studentId };
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.examRegistration.count({ where }),
+      this.prisma.examRegistration.findMany({
+        where,
+        include: {
+          exam: { select: { id: true, code: true, title: true, examDate: true } },
+          targetRank: { select: { code: true, name: true, orderIndex: true } },
+          currentRank: { select: { code: true, name: true, orderIndex: true } },
+        },
+        orderBy: { exam: { examDate: 'desc' } },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        exam: row.exam,
+        status: row.status,
+        rankAtRegistration: row.currentRank,
+        targetRank: row.targetRank,
+        resultNote: row.resultNote,
+        resultRecordedAt: row.updatedAt,
+      })),
+      total,
+      page,
+      limit,
     };
   }
 

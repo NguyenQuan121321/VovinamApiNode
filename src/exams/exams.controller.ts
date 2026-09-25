@@ -19,6 +19,7 @@ import { ExamsService } from './exams.service';
 import {
   CreateBeltExamDto,
   ExamResultDto,
+  ListExamRegistrationsQueryDto,
   ListExamsQueryDto,
   RegisterExamDto,
   UpdateBeltExamDto,
@@ -61,6 +62,19 @@ export class ExamsController {
     @Body() dto: RegisterExamDto,
   ) {
     return this.exams.register(user, id, dto);
+  }
+
+  /**
+   * Belt history of one student (matrix row 17): any role may read it, the
+   * ownership guard 7.3 scopes the answer (student self, parent child,
+   * instructor own class, admin all) with the uniform 404 posture.
+   */
+  @Get('exam-registrations')
+  listStudentRegistrations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ListExamRegistrationsQueryDto,
+  ) {
+    return this.exams.listStudentRegistrations(user, query.studentId, query);
   }
 
   /** ADMIN/INSTRUCTOR record the outcome; PASS promotes the student's rank (plan 8). */

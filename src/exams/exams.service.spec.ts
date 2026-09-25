@@ -60,6 +60,7 @@ function makePrismaMock() {
     examRegistration: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       count: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -410,6 +411,50 @@ describe('ExamsService', () => {
       expect(auditRecord).toHaveBeenCalledWith(
         expect.objectContaining({ event: 'belt_exam_updated', success: true }),
       );
+    });
+  });
+
+  describe('listStudentRegistrations (belt history, matrix row 17)', () => {
+    it('enforces the ownership guard and returns the scoped timeline', async () => {
+      prisma.examRegistration.count.mockResolvedValue(1);
+      prisma.examRegistration.findMany.mockResolvedValue([
+        {
+          id: 'reg-1',
+          studentId: 'sp-1',
+          status: 'RESULT_PASS',
+          resultNote: 'Well done',
+          updatedAt: new Date('2026-09-01T00:00:00Z'),
+          exam: {
+            id: 'e-1',
+            code: 'EXAM-2026-1',
+            title: 'Dot 1',
+            examDate: new Date('2026-09-01'),
+          },
+          targetRank: { code: 'VANG_1', name: 'Yellow 1', orderIndex: 4 },
+          currentRank: { code: 'LAM_1', name: 'Blue 1', orderIndex: 1 },
+        },
+      ]);
+      const result = await service.listStudentRegistrations(studentCaller, 'sp-1', {
+        studentId: 'sp-1',
+        page: 1,
+        limit: 20,
+      });
+      expect(ownership.assertCanAccess).toHaveBeenCalledWith(studentCaller, 'sp-1');
+      expect(result).toMatchObject({ total: 1, page: 1, limit: 20 });
+      const item = (result.items as Array<Record<string, unknown>>)[0] as Record<string, unknown>;
+      expect(item).toMatchObject({ status: 'RESULT_PASS' });
+      expect(item.exam).toMatchObject({ code: 'EXAM-2026-1' });
+    });
+
+    it('answers 404 through the guard for a foreign student', async () => {
+      ownership.assertCanAccess.mockRejectedValueOnce(new NotFoundException('Not found'));
+      await expect(
+        service.listStudentRegistrations(studentCaller, 'foreign', {
+          studentId: 'foreign',
+          page: 1,
+          limit: 20,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

@@ -2,7 +2,7 @@ import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, type NextFunction, type Response } from 'express';
 import type { Express } from 'express';
 import { AppModule } from './app.module';
 import { EnvService } from './config/env.service';
@@ -60,6 +60,12 @@ export async function createApp() {
       contentSecurityPolicy: env.swaggerEnabled ? { directives: swaggerCsp() } : undefined,
     }),
   );
+  // Keep the API out of search indexes and casual crawlers: nothing here is meant for
+  // public discovery, and Swagger (dev/staging only) must never be indexed either.
+  app.use((_req: unknown, res: Response, next: NextFunction) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    next();
+  });
   if (env.corsOrigins.length > 0) {
     app.enableCors({ origin: env.corsOrigins, credentials: true });
   }

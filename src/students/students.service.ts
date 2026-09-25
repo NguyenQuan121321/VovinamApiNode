@@ -6,7 +6,12 @@ import { AuditService } from '../auth/audit/audit.service';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import { StudentOwnershipService } from './student-ownership.service';
 import { serializeStudent, type CallerRole } from './serialize-student';
-import type { CreateStudentDto, ListStudentsQueryDto, UpdateStudentDto } from './dto/students.dto';
+import type {
+  CreateStudentDto,
+  ListStudentsQueryDto,
+  UpdateOwnStudentDto,
+  UpdateStudentDto,
+} from './dto/students.dto';
 
 /** 8-char invite code from an unambiguous alphabet (no O/0/I/1), ~40 bits (plan 7.1). */
 export function generateInviteCode(): string {
@@ -154,6 +159,40 @@ export class StudentsService {
       throw new NotFoundException('Not found');
     }
     return serializeStudent(profile, 'STUDENT');
+  }
+
+  /**
+   * STUDENT self-service edit (matrix row 4, E*): contact fields only. Identity
+   * fields (name, dob, gender), belt and status stay admin-managed, so a student
+   * cannot rewrite who they are — only how the club reaches them.
+   */
+  async updateOwn(
+    caller: AuthenticatedUser,
+    dto: UpdateOwnStudentDto,
+  ): Promise<Record<string, unknown>> {
+    const profile = await this.prisma.studentProfile.findFirst({
+      where: { userId: caller.id, deletedAt: null },
+    });
+    if (profile === null) {
+      throw new NotFoundException('Not found');
+    }
+    const updated = await this.prisma.studentProfile.update({
+      where: { id: profile.id },
+      data: {
+        phone: dto.phone,
+        address: dto.address,
+        emergencyContactName: dto.emergencyContactName,
+        emergencyContactPhone: dto.emergencyContactPhone,
+        medicalNotes: dto.medicalNotes,
+      },
+    });
+    this.audit.record({
+      userId: caller.id,
+      event: 'student_profile_self_updated',
+      success: true,
+      detail: `student_profile:${profile.id}`,
+    });
+    return serializeStudent(updated, 'STUDENT');
   }
 
   /** ADMIN only (plan 8): full-field edit incl. approval (PENDING -> ACTIVE). */

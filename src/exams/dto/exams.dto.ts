@@ -129,3 +129,9 @@ export class ExamResultDto {
   @IsUUID()
   examinerId?: string;
 }
+
+/** Belt history (matrix row 17): registrations of one student, guard 7.3 scoped. */
+export class ListExamRegistrationsQueryDto extends PageDto {
+  @IsUUID()
+  studentId!: string;
+}

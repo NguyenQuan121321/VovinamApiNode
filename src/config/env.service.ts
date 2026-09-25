@@ -63,6 +63,14 @@ export class EnvService {
     return this.get('RATE_LIMIT_MAX_REQUESTS');
   }
 
+  get authIpLimitMax(): number {
+    return this.get('AUTH_IP_LIMIT_MAX');
+  }
+
+  get authIpLimitTtlSeconds(): number {
+    return this.get('AUTH_IP_LIMIT_TTL_SECONDS');
+  }
+
   get corsOrigins(): string[] {
     return this.get('CORS_ALLOWED_ORIGINS');
   }

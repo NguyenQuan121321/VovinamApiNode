@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
+import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import type { CreateBeltRankDto, UpdateBeltRankDto } from './dto/belts.dto';
 
 /** Maps the two unique constraints (code, orderIndex) to distinct 409 messages. */
@@ -77,5 +78,42 @@ export class BeltsService {
     } catch (error) {
       throw mapRankConflict(error);
     }
+  }
+
+  /**
+   * Belt distribution report (matrix row 28): active students grouped by their
+   * current rank. ADMIN sees the club; INSTRUCTOR only students currently
+   * enrolled in the classes they teach.
+   */
+  async distribution(caller: AuthenticatedUser): Promise<Record<string, unknown>> {
+    const where: Prisma.StudentProfileWhereInput = { deletedAt: null };
+    if (caller.role === 'INSTRUCTOR') {
+      const enrollments = await this.prisma.enrollment.findMany({
+        where: { leftAt: null, class: { instructorId: caller.id } },
+        select: { studentId: true },
+        distinct: ['studentId'],
+      });
+      where.id = { in: enrollments.map((enrollment) => enrollment.studentId) };
+    }
+    const grouped = await this.prisma.studentProfile.groupBy({
+      by: ['currentBeltRankId'],
+      where,
+      _count: { _all: true },
+    });
+    const ranks = await this.prisma.beltRank.findMany({ orderBy: { orderIndex: 'asc' } });
+    const unranked = await this.prisma.studentProfile.count({
+      where: { ...where, currentBeltRankId: null },
+    });
+    const countByRank = new Map(grouped.map((row) => [row.currentBeltRankId, row._count._all]));
+    return {
+      distribution: ranks.map((rank) => ({
+        rankId: rank.id,
+        code: rank.code,
+        name: rank.name,
+        orderIndex: rank.orderIndex,
+        students: countByRank.get(rank.id) ?? 0,
+      })),
+      unrankedStudents: unranked,
+    };
   }
 }

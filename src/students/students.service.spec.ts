@@ -26,6 +26,7 @@ const profile = {
 };
 
 const admin = { id: 'admin-1', role: 'ADMIN', sessionId: 's', jti: 'j' } as AuthenticatedUser;
+const studentCaller = { id: 'u-1', role: 'STUDENT', sessionId: 's', jti: 'j' } as AuthenticatedUser;
 
 function makePrismaMock() {
   return {
@@ -191,5 +192,28 @@ describe('StudentsService', () => {
     await expect(service.myProfile(admin)).resolves.toMatchObject({ fullName: 'Nguyen Van B' });
     prisma.studentProfile.findFirst.mockResolvedValue(null);
     await expect(service.myProfile(admin)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('updateOwn (matrix row 4, E*)', () => {
+    it('updates only the contact fields of the caller’s own profile', async () => {
+      prisma.studentProfile.findFirst.mockResolvedValue({ id: 'sp-1', userId: 'u-1' });
+      prisma.studentProfile.update.mockResolvedValue({
+        id: 'sp-1',
+        fullName: 'Van A',
+        phone: '0911',
+      });
+      const result = await service.updateOwn(studentCaller, { phone: '0911' });
+      expect(result).toMatchObject({ phone: '0911' });
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'student_profile_self_updated' }),
+      );
+    });
+
+    it('answers 404 when the caller has no student profile', async () => {
+      prisma.studentProfile.findFirst.mockResolvedValue(null);
+      await expect(service.updateOwn(studentCaller, { phone: '0911' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });

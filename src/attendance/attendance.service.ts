@@ -255,4 +255,70 @@ export class AttendanceService {
       note: record.note,
     };
   }
+
+  /**
+   * Attendance report for one month (matrix row 26): per-class session counts and
+   * status totals. ADMIN sees the whole club; INSTRUCTOR only the classes they
+   * teach — the same scoping rule as attendance writes (plan 7.3/7.4).
+   */
+  async monthlyReport(
+    caller: AuthenticatedUser,
+    month: number,
+    year: number,
+  ): Promise<Array<Record<string, unknown>>> {
+    const rangeStart = new Date(Date.UTC(year, month - 1, 1));
+    const rangeEnd = new Date(Date.UTC(year, month, 1));
+    const classWhere: Prisma.ClassWhereInput =
+      caller.role === 'ADMIN' ? {} : { instructorId: caller.id, status: { not: 'ARCHIVED' } };
+    const classes = await this.prisma.class.findMany({
+      where: classWhere,
+      select: { id: true, name: true, status: true },
+    });
+    if (classes.length === 0) return [];
+    const sessions = await this.prisma.attendanceSession.findMany({
+      where: {
+        classId: { in: classes.map((c) => c.id) },
+        sessionDate: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { id: true, classId: true },
+    });
+    const records = await this.prisma.attendanceRecord.groupBy({
+      by: ['status', 'attendanceSessionId'],
+      where: { attendanceSessionId: { in: sessions.map((s) => s.id) } },
+      _count: { _all: true },
+    });
+    const statusBySession = new Map<string, Record<string, number>>();
+    for (const row of records) {
+      const bucket = statusBySession.get(row.attendanceSessionId) ?? {};
+      bucket[row.status] = row._count._all;
+      statusBySession.set(row.attendanceSessionId, bucket);
+    }
+    return classes.map((club) => {
+      const classSessions = sessions.filter((s) => s.classId === club.id);
+      let present = 0;
+      let late = 0;
+      let absent = 0;
+      let excused = 0;
+      for (const session of classSessions) {
+        for (const [status, count] of Object.entries(statusBySession.get(session.id) ?? {})) {
+          if (status === 'PRESENT') present += count;
+          else if (status === 'LATE') late += count;
+          else if (status === 'ABSENT') absent += count;
+          else if (status === 'EXCUSED') excused += count;
+        }
+      }
+      const marked = present + late + absent + excused;
+      return {
+        classId: club.id,
+        className: club.name,
+        sessionsHeld: classSessions.length,
+        PRESENT: present,
+        LATE: late,
+        ABSENT: absent,
+        EXCUSED: excused,
+        markedRecords: marked,
+        attendanceRate: marked === 0 ? null : Math.round(((present + late) / marked) * 1000) / 10,
+      };
+    });
+  }
 }

@@ -204,9 +204,9 @@ jobs:
       - name: Assert all expected tables exist
         run: |
           # Plain libpq URI: psql rejects Prisma's ?schema=public query parameter.
-          TABLE_COUNT=$(psql "postgresql://vovinam:vovinam@localhost:5432/vovinam_migrate" -t -A -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','sessions','refresh_tokens','totp_credentials','recovery_codes','used_tokens','audit_logs','app_settings','belt_ranks','student_profiles','parent_student_links','classes','class_schedules','enrollments','attendance_sessions','attendance_records','belt_exams','exam_registrations','invoices','invoice_items','payment_transactions','notifications','consent_logs','announcements','_prisma_migrations')")
+          TABLE_COUNT=$(psql "postgresql://vovinam:vovinam@localhost:5432/vovinam_migrate" -t -A -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','sessions','refresh_tokens','totp_credentials','recovery_codes','used_tokens','audit_logs','app_settings','belt_ranks','student_profiles','parent_student_links','classes','class_schedules','enrollments','attendance_sessions','attendance_records','belt_exams','exam_registrations','invoices','invoice_items','payment_transactions','notifications','consent_logs','announcements','leave_requests','promotion_proposals','student_evaluations','discount_codes','_prisma_migrations')")
           echo "Expected tables found: $TABLE_COUNT"
-          test "$TABLE_COUNT" -eq 25
+          test "$TABLE_COUNT" -eq 29
       - name: Verify migrations replay cleanly from scratch
         run: |
           npx prisma migrate reset --force
@@ -241,18 +241,24 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma migrate deploy
-      - name: Run e2e suite (full output emitted as annotations on failure)
+      - name: Run e2e suite (failure summary emitted as annotations on failure)
         run: |
           set +e
           npm run test:e2e > e2e-output.txt 2>&1
           EXIT=$?
           if [ "$EXIT" != "0" ]; then
-            # The output is small (~1KB); mirror every line into annotations so the
-            # failure is readable on the PR without Actions log access.
-            grep -v '^$' e2e-output.txt | head -45 | while IFS= read -r line; do
-              safe=$(printf '%s' "$line" | cut -c1-160)
-              echo "::error title=e2e::$safe"
-            done
+            echo "::group::e2e failure summary (tail)"
+            tail -80 e2e-output.txt
+            echo "::endgroup::"
+            # Jest prints the failing-test summaries at the END of the output, so
+            # annotate the LAST 45 non-empty lines (first-45 is boot log noise).
+            # awk exits itself at the cap — a grep|head pipeline would SIGPIPE-kill
+            # the loop mid-way.
+            tac e2e-output.txt | awk 'NF { print substr($0, 1, 160); count++; if (count == 45) exit }' |
+              tac |
+              while IFS= read -r line; do
+                echo "::error title=e2e::$line"
+              done
           fi
           exit $EXIT
       - uses: actions/upload-artifact@v4

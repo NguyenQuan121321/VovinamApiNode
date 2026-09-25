@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 function makePrismaMock() {
   return {
     beltRank: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
+    studentProfile: { groupBy: jest.fn(), count: jest.fn() },
+    enrollment: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
 }
@@ -117,5 +119,47 @@ describe('BeltsService', () => {
     expect(auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'belt_rank_updated', success: true }),
     );
+  });
+
+  describe('distribution (matrix row 28)', () => {
+    const adminCaller = { id: 'admin-1', role: 'ADMIN', sessionId: 's', jti: 'j' } as never;
+    const instructorCaller = {
+      id: 'inst-1',
+      role: 'INSTRUCTOR',
+      sessionId: 's',
+      jti: 'j',
+    } as never;
+
+    it('reports students per rank club-wide for the admin, unranked separately', async () => {
+      prisma.beltRank.findMany.mockResolvedValue([
+        { id: 1, code: 'LAM_1', name: 'Blue 1', orderIndex: 1, isActive: true },
+        { id: 2, code: 'LAM_2', name: 'Blue 2', orderIndex: 2, isActive: true },
+      ]);
+      prisma.studentProfile.groupBy.mockResolvedValue([
+        { currentBeltRankId: 2, _count: { _all: 5 } },
+      ]);
+      prisma.studentProfile.count.mockResolvedValue(3);
+      const result = (await service.distribution(adminCaller)) as {
+        distribution: Array<{ rankId: number; students: number }>;
+        unrankedStudents: number;
+      };
+      expect(result.distribution.find((r) => r.rankId === 2)?.students).toBe(5);
+      expect(result.unrankedStudents).toBe(3);
+    });
+
+    it('scopes the instructor to students currently enrolled in their classes', async () => {
+      prisma.beltRank.findMany.mockResolvedValue([
+        { id: 1, code: 'LAM_1', name: 'Blue 1', orderIndex: 1, isActive: true },
+      ]);
+      prisma.enrollment.findMany.mockResolvedValue([{ studentId: 'sp-1' }]);
+      prisma.studentProfile.groupBy.mockResolvedValue([]);
+      prisma.studentProfile.count.mockResolvedValue(0);
+      await service.distribution(instructorCaller);
+      expect(prisma.enrollment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ leftAt: null }) }),
+      );
+      const call = prisma.studentProfile.groupBy.mock.calls[0]?.[0] as { where: { id: unknown } };
+      expect(call.where.id).toEqual({ in: ['sp-1'] });
+    });
   });
 });

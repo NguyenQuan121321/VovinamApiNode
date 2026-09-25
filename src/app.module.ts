@@ -26,6 +26,9 @@ import { ParentsModule } from './parents/parents.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ConsentModule } from './consent/consent.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { LeavesModule } from './leaves/leaves.module';
+import { PromotionsModule } from './promotions/promotions.module';
+import { EvaluationsModule } from './evaluations/evaluations.module';
 
 @Module({
   imports: [
@@ -53,6 +56,9 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     NotificationsModule,
     ConsentModule,
     AnnouncementsModule,
+    LeavesModule,
+    PromotionsModule,
+    EvaluationsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
@@ -63,6 +69,9 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware, MetricsMiddleware).forRoutes('*');
+    // Named wildcard (Nest 11 / path-to-regexp v8): the legacy bare '*' is
+    // auto-converted with a warning per boot. The request-id and metrics
+    // middleware must wrap every route, including the prefix-less ops probes.
+    consumer.apply(RequestIdMiddleware, MetricsMiddleware).forRoutes('{*splat}');
   }
 }

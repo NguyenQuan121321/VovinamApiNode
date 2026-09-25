@@ -33,6 +33,7 @@ module.exports = {
         'ops',
         'ci',
         'test',
+        'unit',
         'types',
         'docker',
         'mfa',

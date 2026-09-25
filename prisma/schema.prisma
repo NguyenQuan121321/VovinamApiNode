@@ -173,6 +173,11 @@ model User {
   notifications         Notification[]
   consents              ConsentLog[]
   consentActions        ConsentLog[]         @relation("ConsentActor")
+  leaveRequestsMade     LeaveRequest[]       @relation("LeaveRequestRequester")
+  leaveRequestsReviewed LeaveRequest[]       @relation("LeaveRequestReviewer")
+  proposalsAuthored     PromotionProposal[]  @relation("ProposalAuthor")
+  proposalsReviewed     PromotionProposal[]  @relation("ProposalReviewer")
+  evaluationsAuthored   StudentEvaluation[]  @relation("EvaluationAuthor")
 
   @@map("users")
 }
@@ -293,6 +298,7 @@ model BeltRank {
   exams                    BeltExam[]         @relation("ExamTargetRank")
   currentRankRegistrations ExamRegistration[] @relation("RegistrationCurrentRank")
   targetRankRegistrations  ExamRegistration[] @relation("RegistrationTargetRank")
+  proposals                PromotionProposal[] @relation("ProposalTargetRank")
 
   @@map("belt_ranks")
 }
@@ -326,6 +332,9 @@ model StudentProfile {
   attendanceRecords AttendanceRecord[]
   examRegistrations ExamRegistration[]
   invoices          Invoice[]
+  leaveRequests     LeaveRequest[]      @relation("LeaveRequestStudent")
+  proposals         PromotionProposal[] @relation("PromotionProposalStudent")
+  evaluations       StudentEvaluation[] @relation("EvaluationStudent")
 
   @@map("student_profiles")
 }
@@ -367,6 +376,8 @@ model Class {
   enrollments        Enrollment[]
   attendanceSessions AttendanceSession[]
   announcements      Announcement[]
+  leaveRequests      LeaveRequest[]      @relation("LeaveRequestClass")
+  evaluations        StudentEvaluation[] @relation("EvaluationClass")
 
   @@index([instructorId])
   @@map("classes")
@@ -656,4 +667,115 @@ model Announcement {
   @@index([classId])
   @@index([publishedAt])
   @@map("announcements")
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Student absence request for one class session (matrix row 11): the student or
+/// a linked parent creates it, the instructor (own class) or admin reviews it.
+/// Unique per (student, class, date) so one session cannot collect duplicates.
+model LeaveRequest {
+  id                String             @id @default(uuid()) @db.Uuid
+  studentId         String             @map("student_id") @db.Uuid
+  student           StudentProfile     @relation("LeaveRequestStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  classId           String             @map("class_id") @db.Uuid
+  class             Class              @relation("LeaveRequestClass", fields: [classId], references: [id], onDelete: Restrict)
+  /// Account that submitted the request: the student, the linked parent, or the
+  /// admin creating on a student's behalf (NULL only for admin creation).
+  requestedByUserId String?            @map("requested_by_user_id") @db.Uuid
+  requestedBy       User?              @relation("LeaveRequestRequester", fields: [requestedByUserId], references: [id])
+  sessionDate       DateTime           @map("session_date") @db.Date
+  reason            String             @db.VarChar(500)
+  status            LeaveRequestStatus @default(PENDING)
+  reviewedByUserId  String?            @map("reviewed_by_user_id") @db.Uuid
+  reviewedBy        User?              @relation("LeaveRequestReviewer", fields: [reviewedByUserId], references: [id])
+  reviewedAt        DateTime?
+  reviewNote        String?            @db.VarChar(500)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  @@unique([studentId, classId, sessionDate])
+  @@index([classId, sessionDate])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+/// Instructor/master proposal to promote a student (matrix row 14). Recording the
+/// approval is advisory bookkeeping — the belt itself still changes only through
+/// an exam RESULT_PASS (plan 13.4).
+model PromotionProposal {
+  id               String         @id @default(uuid()) @db.Uuid
+  studentId        String         @map("student_id") @db.Uuid
+  student          StudentProfile @relation("PromotionProposalStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  proposedRankId   Int            @map("proposed_rank_id")
+  proposedRank     BeltRank       @relation("ProposalTargetRank", fields: [proposedRankId], references: [id], onDelete: Restrict)
+  proposedByUserId String         @map("proposed_by_user_id") @db.Uuid
+  proposedBy       User           @relation("ProposalAuthor", fields: [proposedByUserId], references: [id], onDelete: Restrict)
+  note             String?        @db.VarChar(500)
+  status           ProposalStatus @default(PENDING)
+  reviewedByUserId String?        @map("reviewed_by_user_id") @db.Uuid
+  reviewedBy       User?          @relation("ProposalReviewer", fields: [reviewedByUserId], references: [id])
+  reviewedAt       DateTime?
+  reviewNote       String?        @db.VarChar(500)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@index([studentId])
+  @@index([status])
+  @@map("promotion_proposals")
+}
+
+/// Periodic instructor evaluation of a student (matrix row 12). One evaluation
+/// per (student, author, period) while the period is given; NULL-period ad-hoc
+/// evaluations are unlimited (Postgres unique never collides on NULLs).
+model StudentEvaluation {
+  id           String         @id @default(uuid()) @db.Uuid
+  studentId    String         @map("student_id") @db.Uuid
+  student      StudentProfile @relation("EvaluationStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  authorUserId String         @map("author_user_id") @db.Uuid
+  author       User           @relation("EvaluationAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  classId      String?        @map("class_id") @db.Uuid
+  class        Class?         @relation("EvaluationClass", fields: [classId], references: [id], onDelete: SetNull)
+  periodMonth  Int?           @map("period_month")
+  periodYear   Int?           @map("period_year")
+  /// 1..10; the meaning of the scale is the club's.
+  rating       Int
+  comment      String?        @db.VarChar(1000)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@unique([studentId, authorUserId, periodMonth, periodYear])
+  @@index([studentId])
+  @@map("student_evaluations")
+}
+
+/// Discount code ("khuyến mãi", matrix row 23) applied at invoice creation.
+/// Exactly one of percentOff / amountOff is required (application-validated);
+/// the invoice stores the resulting discount amount, the code stays config data.
+model DiscountCode {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(40)
+  description String?  @db.VarChar(200)
+  /// Percentage of the invoice subtotal (1..100).
+  percentOff  Int?     @map("percent_off")
+  /// Fixed VND amount subtracted from the subtotal.
+  amountOff   Int?     @map("amount_off")
+  validFrom   DateTime @map("valid_from") @db.Date
+  validUntil  DateTime @map("valid_until") @db.Date
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("discount_codes")
 }
