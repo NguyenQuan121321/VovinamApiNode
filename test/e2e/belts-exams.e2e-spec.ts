@@ -18,12 +18,15 @@ describe('Belt ranks and exams (e2e)', () => {
   const users = {
     admin: `admin-${stamp}@example.com`,
     instructor: `instructor-${stamp}@example.com`,
+    instructor2: `instructor2-${stamp}@example.com`,
     student: `student-${stamp}@example.com`,
     parent: `parent-${stamp}@example.com`,
     parentB: `parent-b-${stamp}@example.com`,
   };
   let adminToken = '';
   let instructorToken = '';
+  let instructor2Token = '';
+  let instructorUserId = '';
   let studentToken = '';
   let parentToken = '';
   let parentBToken = '';
@@ -75,6 +78,7 @@ describe('Belt ranks and exams (e2e)', () => {
     const rows: Array<[keyof typeof users, 'ADMIN' | 'STUDENT' | 'PARENT' | 'INSTRUCTOR']> = [
       ['admin', 'ADMIN'],
       ['instructor', 'INSTRUCTOR'],
+      ['instructor2', 'INSTRUCTOR'],
       ['student', 'STUDENT'],
       ['parent', 'PARENT'],
       ['parentB', 'PARENT'],
@@ -89,9 +93,14 @@ describe('Belt ranks and exams (e2e)', () => {
     adminToken = await login(users.admin);
     await enrollTotp(app, adminToken);
     instructorToken = await login(users.instructor);
+    instructor2Token = await login(users.instructor2);
     studentToken = await login(users.student);
     parentToken = await login(users.parent);
     parentBToken = await login(users.parentB);
+
+    instructorUserId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: users.instructor }, select: { id: true } })
+    ).id;
   });
 
   afterAll(async () => {
@@ -166,6 +175,18 @@ describe('Belt ranks and exams (e2e)', () => {
       adminToken,
     ).expect(201);
     secondProfileId = second.body.data.id as string;
+
+    // Both students train in the instructor's class: exam results are scoped
+    // by guard 7.3, so the recording instructor must currently teach them.
+    const resultClass = await prisma.class.create({
+      data: { name: `Result class ${stamp}`, instructorId: instructorUserId, capacity: 10 },
+    });
+    await prisma.enrollment.createMany({
+      data: [studentProfileId, secondProfileId].map((studentId) => ({
+        studentId,
+        classId: resultClass.id,
+      })),
+    });
 
     for (const profileId of [studentProfileId, secondProfileId]) {
       const regen = await send(
@@ -316,6 +337,22 @@ describe('Belt ranks and exams (e2e)', () => {
       { status: 'RESULT_FAIL' },
       studentToken,
     ).expect(403);
+  });
+
+  it('answers the uniform 404 when a foreign instructor records a result', async () => {
+    // The second instructor teaches nothing; guard 7.3 scopes results the same
+    // way as every other student-scoped surface (regression: results used to be
+    // recordable for ANY registration id, silently promoting foreign belts).
+    const failReg = await prisma.examRegistration.findFirstOrThrow({
+      where: { examId: exam2Id, studentId: secondProfileId },
+      select: { id: true },
+    });
+    await send(
+      'post',
+      `/api/v1/exam-registrations/${failReg.id}/result`,
+      { status: 'RESULT_PASS' },
+      instructor2Token,
+    ).expect(404);
   });
 
   it('records FAIL without touching the rank', async () => {

@@ -370,7 +370,7 @@ describe('ExamsService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
 
       prisma.beltRank.findUnique.mockResolvedValue({ id: 4, isActive: true });
-      prisma.beltExam.findFirst.mockResolvedValue(null);
+      prisma.beltExam.findMany.mockResolvedValue([]);
       prisma.beltExam.findUnique.mockResolvedValue(null);
       await expect(
         service.create({
