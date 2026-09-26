@@ -1,0 +1,24 @@
+meta {
+  name: student cannot post
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "no", "body": "no", "audience": "ALL"}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}

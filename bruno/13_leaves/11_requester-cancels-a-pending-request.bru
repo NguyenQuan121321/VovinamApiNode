@@ -1,0 +1,20 @@
+meta {
+  name: requester cancels a pending request
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests/{{leaveParentId}}/cancel
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("cancelled", function() { expect(res.body.data.status).to.equal("CANCELLED"); });
+}

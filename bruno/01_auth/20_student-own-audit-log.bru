@@ -1,0 +1,21 @@
+meta {
+  name: student own audit log
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/auth/me/audit-log
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("paginated shape", function() { expect(res.body.data.items).to.be.an("array");
+expect(res.body.data.total).to.be.a("number"); });
+}

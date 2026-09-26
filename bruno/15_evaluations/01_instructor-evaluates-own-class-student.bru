@@ -1,0 +1,30 @@
+meta {
+  name: instructor evaluates own-class student
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/evaluations
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "classId": "{{basicClassId}}", "rating": 8, "periodMonth": 1, "periodYear": 2020, "comment": "UAT strong progress"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("evaluationId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("author recorded", function() { expect(res.body.data.authorEmail).to.be.a("string"); });
+}

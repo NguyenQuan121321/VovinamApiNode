@@ -1,0 +1,23 @@
+meta {
+  name: instructor has no invoice surface
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/invoices/{{manualInvoiceId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}
+
+docs {
+  INSTRUCTOR is excluded from the money domain entirely (AD-06): uniform 404.
+}

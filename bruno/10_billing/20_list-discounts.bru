@@ -1,0 +1,19 @@
+meta {
+  name: list discounts
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/discounts
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

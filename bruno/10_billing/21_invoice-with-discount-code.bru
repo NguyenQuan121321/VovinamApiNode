@@ -1,0 +1,26 @@
+meta {
+  name: invoice with discount code
+  type: http
+  seq: 21
+}
+
+post {
+  url: {{baseUrl}}/api/v1/invoices
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "type": "OTHER", "items": [{"description": "coded", "quantity": 1, "unitAmount": 100000}], "discountCode": "UAT10"}
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("10% burned in at creation", function() { expect(res.body.data.discount).to.equal(10000);
+expect(res.body.data.total).to.equal(90000); });
+}

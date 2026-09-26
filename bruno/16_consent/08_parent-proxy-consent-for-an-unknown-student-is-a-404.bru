@@ -1,0 +1,24 @@
+meta {
+  name: parent proxy consent for an unknown student is a 404
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/consent
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"purpose": "MEDIA_USAGE", "studentId": "00000000-0000-4000-8000-000000000000"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

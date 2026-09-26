@@ -1,0 +1,19 @@
+meta {
+  name: metrics with wrong token is rejected
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/metrics
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer wrong-metrics-token
+}
+
+tests {
+  test("status 401", function() { expect(res.status).to.equal(401); });
+}

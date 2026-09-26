@@ -1,0 +1,29 @@
+meta {
+  name: add schedule slot
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classes/{{newClassId}}/schedules
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"weekday": 6, "startTime": "09:00", "endTime": "10:30", "effectiveFrom": "2026-01-01"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("scheduleId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

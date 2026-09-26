@@ -1,0 +1,28 @@
+meta {
+  name: instructor cannot propose for a foreign student (uniform 404)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/promotion-proposals
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{minorCId}}", "proposedRankId": "{{lam2Id}}"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}
+
+docs {
+  minorC trains in another instructor class; the ownership guard answers the uniform 404.
+}

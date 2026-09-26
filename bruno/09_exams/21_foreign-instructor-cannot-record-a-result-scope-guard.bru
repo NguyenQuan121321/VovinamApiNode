@@ -1,0 +1,28 @@
+meta {
+  name: foreign instructor cannot record a result (scope guard)
+  type: http
+  seq: 21
+}
+
+post {
+  url: {{baseUrl}}/api/v1/exam-registrations/{{minorBRegId}}/result
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "RESULT_PASS"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}
+
+docs {
+  Instructors may only act on students currently enrolled in classes they teach; minorB trains in the demo instructor class, so the foreign instructor gets the uniform 404. (Regression for the result-recording scope guard.)
+}

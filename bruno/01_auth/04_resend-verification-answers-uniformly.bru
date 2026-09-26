@@ -1,0 +1,24 @@
+meta {
+  name: resend verification answers uniformly
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/resend-verification
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "uat-registrant@example.com"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("sent flag", function() { expect(res.body.data.sent).to.equal(true); });
+}

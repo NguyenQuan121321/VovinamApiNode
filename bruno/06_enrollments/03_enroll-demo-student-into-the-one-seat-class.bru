@@ -1,0 +1,24 @@
+meta {
+  name: enroll demo student into the one-seat class
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/enrollments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "classId": "{{smallClassId}}"}
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: update the rank (admin)
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/belt-ranks/{{newRankId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"name": "UAT Rank Renamed"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("renamed", function() { expect(res.body.data.name).to.equal("UAT Rank Renamed"); });
+}

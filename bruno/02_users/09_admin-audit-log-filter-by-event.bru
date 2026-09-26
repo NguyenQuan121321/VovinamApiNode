@@ -1,0 +1,20 @@
+meta {
+  name: admin audit log filter by event
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/audit-log?event=user_created
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("only user_created events", function() { res.body.data.items.forEach(function(e){ expect(e.event).to.equal("user_created"); }); });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: update discount code
+  type: http
+  seq: 24
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/discounts/{{discountId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"description": "UAT updated"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

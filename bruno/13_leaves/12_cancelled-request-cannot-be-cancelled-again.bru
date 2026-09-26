@@ -1,0 +1,19 @@
+meta {
+  name: cancelled request cannot be cancelled again
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests/{{leaveParentId}}/cancel
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

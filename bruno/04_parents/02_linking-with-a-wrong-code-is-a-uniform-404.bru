@@ -1,0 +1,24 @@
+meta {
+  name: linking with a wrong code is a uniform 404
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/parents/link
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"inviteCode": "XXXXXXXX"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

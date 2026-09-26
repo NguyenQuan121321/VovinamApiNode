@@ -1,0 +1,27 @@
+meta {
+  name: start TOTP enrollment
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/mfa/totp/enable
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  const data = res.body.data;
+  const secret = (data.otpauthUrl.match(/secret=([A-Z2-7]+)/) || [])[1];
+  bru.setEnvVar("totpSecret", secret);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("otpauth url returned", function() { expect(res.body.data.otpauthUrl).to.contain("otpauth://totp/"); });
+  test("qr data url returned", function() { expect(res.body.data.qrDataUrl).to.contain("data:image/png;base64,"); });
+}

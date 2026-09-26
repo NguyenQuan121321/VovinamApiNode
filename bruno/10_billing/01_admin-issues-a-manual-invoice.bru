@@ -1,0 +1,31 @@
+meta {
+  name: admin issues a manual invoice
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/invoices
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "type": "OTHER", "items": [{"description": "V\u00f5 ph\u1ee5c UAT", "quantity": 1, "unitAmount": 250000}], "discount": 50000, "note": "UAT uniform"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("manualInvoiceId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("total = subtotal - discount", function() { expect(res.body.data.total).to.equal(200000); });
+  test("sequential invoice number", function() { expect(res.body.data.invoiceNo).to.contain("INV-"); });
+}

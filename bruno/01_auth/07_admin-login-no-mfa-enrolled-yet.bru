@@ -1,0 +1,32 @@
+meta {
+  name: admin login (no MFA enrolled yet)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "{{adminEmail}}", "password": "{{adminPassword}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("adminToken", data.tokens.accessToken);
+  bru.setEnvVar("adminRefresh", data.tokens.refreshToken);
+  bru.setEnvVar("adminUserId", data.user.id);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("no MFA required on first login", function() { expect(res.body.data.mfaRequired).to.equal(false); });
+  test("access token issued", function() { expect(res.body.data.tokens.accessToken).to.be.a("string"); });
+}

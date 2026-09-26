@@ -1,0 +1,25 @@
+meta {
+  name: regenerate invite code
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/students/{{newStudentId}}/invite-code
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("newStudentInvite", data.inviteCode);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("fresh code", function() { expect(res.body.data.inviteCode).to.be.a("string").with.lengthOf(8); });
+}

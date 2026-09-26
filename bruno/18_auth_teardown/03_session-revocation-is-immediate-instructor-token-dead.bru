@@ -1,0 +1,19 @@
+meta {
+  name: session revocation is immediate (instructor token dead)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/auth/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+}
+
+tests {
+  test("status 401", function() { expect(res.status).to.equal(401); });
+}

@@ -1,0 +1,29 @@
+meta {
+  name: student requests a leave for tomorrow
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "classId": "{{basicClassId}}", "sessionDate": "2026-09-26", "reason": "UAT school event"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("leaveId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

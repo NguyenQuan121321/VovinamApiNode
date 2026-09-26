@@ -1,0 +1,20 @@
+meta {
+  name: student reads own evaluations
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/evaluations?studentId={{studentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("at least one evaluation", function() { expect(res.body.data.total).to.be.at.least(1); });
+}

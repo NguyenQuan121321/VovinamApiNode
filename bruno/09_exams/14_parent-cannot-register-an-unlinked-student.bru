@@ -1,0 +1,24 @@
+meta {
+  name: parent cannot register an unlinked student
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams/{{passExamId}}/register
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "00000000-0000-4000-8000-000000000000"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

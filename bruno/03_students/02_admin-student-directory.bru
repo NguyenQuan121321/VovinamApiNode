@@ -1,0 +1,20 @@
+meta {
+  name: admin student directory
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("directory lists the new student", function() { expect(res.body.data.items.some(function(s){ return s.id === bru.getEnvVar("newStudentId"); })).to.equal(true); });
+}

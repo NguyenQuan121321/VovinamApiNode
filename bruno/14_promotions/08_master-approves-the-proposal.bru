@@ -1,0 +1,25 @@
+meta {
+  name: master approves the proposal
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/promotion-proposals/{{proposalId}}/review
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "APPROVED", "note": "schedule the exam"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("approved", function() { expect(res.body.data.status).to.equal("APPROVED"); });
+}

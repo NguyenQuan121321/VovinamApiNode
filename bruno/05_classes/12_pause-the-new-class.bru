@@ -1,0 +1,25 @@
+meta {
+  name: pause the new class
+  type: http
+  seq: 12
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/classes/{{newClassId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "PAUSED"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("paused", function() { expect(res.body.data.status).to.equal("PAUSED"); });
+}

@@ -1,0 +1,19 @@
+meta {
+  name: student cannot flush the outbox
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/notifications/flush
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}

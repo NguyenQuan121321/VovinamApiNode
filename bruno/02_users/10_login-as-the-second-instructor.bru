@@ -1,0 +1,28 @@
+meta {
+  name: login as the second instructor
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "uat-instructor2@example.com", "password": "UatInstr#2026"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("instructor2Token", data.tokens.accessToken);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

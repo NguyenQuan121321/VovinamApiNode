@@ -1,0 +1,25 @@
+meta {
+  name: refund the cash payment
+  type: http
+  seq: 16
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/payments/{{cashPaymentId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "REFUNDED", "note": "UAT refund"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("refunded", function() { expect(res.body.data.status).to.equal("REFUNDED"); });
+}

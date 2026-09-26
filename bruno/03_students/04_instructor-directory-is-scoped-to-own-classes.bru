@@ -1,0 +1,20 @@
+meta {
+  name: instructor directory is scoped to own classes
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("no contact fields for instructors", function() { if(res.body.data.items.length > 0){ expect(res.body.data.items[0].phone).to.equal(undefined); } });
+}

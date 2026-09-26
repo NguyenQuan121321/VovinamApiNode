@@ -1,0 +1,28 @@
+meta {
+  name: parent lists linked children
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/parents/me/children
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+script:post-response {
+  const kids = res.body.data;
+  const bong = kids.find(function(k){ return k.fullName === "Nguyen Thi Bong"; });
+  const cuong = kids.find(function(k){ return k.fullName === "Tran Van Cuong"; });
+  if(bong) bru.setEnvVar("minorBId", bong.id);
+  if(cuong) bru.setEnvVar("minorCId", cuong.id);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("two linked children", function() { expect(res.body.data.length).to.equal(2); });
+}

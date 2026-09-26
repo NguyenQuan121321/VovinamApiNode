@@ -1,0 +1,23 @@
+meta {
+  name: unlinking a verified child is refused
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/parents/links/{{minorBId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}
+
+docs {
+  Verified links require the club; only unverified links self-unlink.
+}

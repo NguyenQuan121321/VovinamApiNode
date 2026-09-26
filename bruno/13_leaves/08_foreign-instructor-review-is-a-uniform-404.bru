@@ -1,0 +1,24 @@
+meta {
+  name: foreign instructor review is a uniform 404
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests/{{leaveId}}/review
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "APPROVED"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

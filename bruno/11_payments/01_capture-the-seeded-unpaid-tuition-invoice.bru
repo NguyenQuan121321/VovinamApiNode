@@ -1,0 +1,24 @@
+meta {
+  name: capture the seeded UNPAID tuition invoice
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/invoices?status=UNPAID&type=TUITION
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  const inv = res.body.data.items.find(function(i){ return i.studentId === bru.getEnvVar("studentId"); });
+  if(inv){ bru.setEnvVar("tuitionInvoiceId", inv.id); bru.setEnvVar("tuitionInvoiceTotal", String(inv.total)); }
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

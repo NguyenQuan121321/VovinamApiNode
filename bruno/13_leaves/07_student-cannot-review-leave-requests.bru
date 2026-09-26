@@ -1,0 +1,24 @@
+meta {
+  name: student cannot review leave requests
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests/{{leaveId}}/review
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "APPROVED"}
+}
+
+tests {
+  test("status 403", function() { expect(res.status).to.equal(403); });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: admin creates a class for the second instructor
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classes
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"name": "UAT Class", "instructorId": "{{instructor2Id}}", "location": "UAT Hall", "capacity": 1}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("newClassId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("starts ACTIVE with empty schedules", function() { expect(res.body.data.status).to.equal("ACTIVE");
+expect(res.body.data.schedules).to.be.an("array"); });
+}

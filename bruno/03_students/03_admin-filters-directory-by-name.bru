@@ -1,0 +1,20 @@
+meta {
+  name: admin filters directory by name
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students?search=UAT
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("only matching students", function() { res.body.data.items.forEach(function(s){ expect(s.fullName).to.contain("UAT"); }); });
+}

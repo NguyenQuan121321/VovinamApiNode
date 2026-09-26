@@ -1,0 +1,26 @@
+meta {
+  name: student sees own profile
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("studentId", data.id);
+  bru.setEnvVar("studentBeltBefore", String(data.currentBeltRankId));
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("profile linked to account", function() { expect(res.body.data.hasLinkedAccount).to.equal(true); });
+}

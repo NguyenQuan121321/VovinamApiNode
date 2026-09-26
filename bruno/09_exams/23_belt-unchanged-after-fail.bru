@@ -1,0 +1,20 @@
+meta {
+  name: belt unchanged after FAIL
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("still the target rank", function() { expect(String(res.body.data.currentBeltRankId)).to.equal(bru.getEnvVar("vang1Id")); });
+}

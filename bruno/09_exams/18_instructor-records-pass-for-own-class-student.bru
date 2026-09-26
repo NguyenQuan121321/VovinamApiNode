@@ -1,0 +1,26 @@
+meta {
+  name: instructor records PASS for own-class student
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/exam-registrations/{{passRegId}}/result
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "RESULT_PASS", "resultNote": "UAT pass"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("outcome recorded", function() { expect(res.body.data.status).to.equal("RESULT_PASS");
+expect(res.body.data.examinerId).to.be.a("string"); });
+}

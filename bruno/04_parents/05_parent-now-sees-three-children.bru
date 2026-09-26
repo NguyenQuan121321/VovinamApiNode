@@ -1,0 +1,20 @@
+meta {
+  name: parent now sees three children
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/parents/me/children
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("three children", function() { expect(res.body.data.length).to.equal(3); });
+}

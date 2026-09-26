@@ -1,0 +1,19 @@
+meta {
+  name: marking again is idempotent
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/notifications/{{notificationId}}/read
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

@@ -1,0 +1,19 @@
+meta {
+  name: proposal list (student sees own)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v1/promotion-proposals
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

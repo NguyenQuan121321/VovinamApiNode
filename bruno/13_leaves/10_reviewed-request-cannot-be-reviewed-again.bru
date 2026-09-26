@@ -1,0 +1,24 @@
+meta {
+  name: reviewed request cannot be reviewed again
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests/{{leaveId}}/review
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "REJECTED"}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

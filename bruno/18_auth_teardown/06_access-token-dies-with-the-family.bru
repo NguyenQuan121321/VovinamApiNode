@@ -1,0 +1,19 @@
+meta {
+  name: access token dies with the family
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/auth/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 401", function() { expect(res.status).to.equal(401); });
+}

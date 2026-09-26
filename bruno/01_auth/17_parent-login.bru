@@ -1,0 +1,29 @@
+meta {
+  name: parent login
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "{{parentEmail}}", "password": "{{demoPassword}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("parentToken", data.tokens.accessToken);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("role PARENT", function() { expect(res.body.data.user.role).to.equal("PARENT"); });
+}

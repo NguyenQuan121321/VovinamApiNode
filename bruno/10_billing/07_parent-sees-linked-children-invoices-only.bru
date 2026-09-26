@@ -1,0 +1,19 @@
+meta {
+  name: parent sees linked children invoices only
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/invoices
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

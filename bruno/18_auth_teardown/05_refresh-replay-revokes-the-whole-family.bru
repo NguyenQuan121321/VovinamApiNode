@@ -1,0 +1,27 @@
+meta {
+  name: refresh replay revokes the whole family
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/refresh-token
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"refreshToken": "{{studentRefresh}}"}
+}
+
+tests {
+  test("status 401", function() { expect(res.status).to.equal(401); });
+}
+
+docs {
+  Reusing the consumed token is treated as token theft: every session of the user is revoked.
+}

@@ -1,0 +1,24 @@
+meta {
+  name: revoking an inactive purpose is a 404
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/consent/revoke
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"purpose": "MEDIA_USAGE"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

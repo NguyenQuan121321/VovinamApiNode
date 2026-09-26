@@ -1,0 +1,31 @@
+meta {
+  name: admin creates a student profile (invite code)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/students
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"fullName": "UAT New Student", "dob": "2011-08-09", "gender": "FEMALE", "phone": "0905550001", "medicalNotes": "None"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("newStudentId", data.id);
+  bru.setEnvVar("newStudentInvite", data.inviteCode);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("invite code returned exactly once", function() { expect(res.body.data.inviteCode).to.be.a("string").with.lengthOf(8); });
+}

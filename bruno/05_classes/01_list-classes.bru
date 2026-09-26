@@ -1,0 +1,25 @@
+meta {
+  name: list classes
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classes
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+script:post-response {
+  const cls = res.body.data.items.find(function(c){ return c.name.indexOf("Co ban") >= 0; });
+  if(cls) bru.setEnvVar("basicClassId", cls.id);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("at least two classes", function() { expect(res.body.data.items.length).to.be.at.least(2); });
+}

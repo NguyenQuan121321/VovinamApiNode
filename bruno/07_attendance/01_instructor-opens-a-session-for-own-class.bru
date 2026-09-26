@@ -1,0 +1,30 @@
+meta {
+  name: instructor opens a session for own class
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/attendance-sessions
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"classId": "{{basicClassId}}", "sessionDate": "2026-09-26", "topic": "UAT session"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("attendanceSessionId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("teacher of record is the class instructor", function() { expect(res.body.data.classId).to.equal(bru.getEnvVar("basicClassId")); });
+}

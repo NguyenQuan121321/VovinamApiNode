@@ -1,0 +1,25 @@
+meta {
+  name: update user role and activation
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/{{instructor2Id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"isActive": true}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("still active", function() { expect(res.body.data.isActive).to.equal(true); });
+}

@@ -1,0 +1,29 @@
+meta {
+  name: student starts a QR payment for own invoice
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/payments/qr/{{tuitionInvoiceId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("qrPaymentId", data.paymentId);
+  bru.setEnvVar("qrOrderRef", data.orderRef);
+  bru.setEnvVar("qrAmount", String(data.amount));
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("order reference issued", function() { expect(res.body.data.orderRef).to.match(/^VV[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/); });
+  test("amount equals invoice total", function() { expect(res.body.data.amount).to.equal(Number(bru.getEnvVar("tuitionInvoiceTotal"))); });
+  test("simulated checkout url", function() { expect(res.body.data.checkoutUrl).to.contain("/payments/simulated/"); });
+}

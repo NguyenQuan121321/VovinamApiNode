@@ -1,0 +1,25 @@
+meta {
+  name: set receiving bank account
+  type: http
+  seq: 16
+}
+
+put {
+  url: {{baseUrl}}/api/v1/admin/billing/settings/bank-account
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"bankAccount": {"bin": "970422", "number": "9012345678901", "name": "UAT VOVINAM CLB", "ownerType": "BUSINESS"}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("stored", function() { expect(res.body.data.bankAccount.name).to.equal("UAT VOVINAM CLB"); });
+}

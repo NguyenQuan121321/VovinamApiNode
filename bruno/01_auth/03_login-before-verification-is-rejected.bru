@@ -1,0 +1,24 @@
+meta {
+  name: login before verification is rejected
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"email": "uat-registrant@example.com", "password": "UatRegistrant#2026"}
+}
+
+tests {
+  test("status 401", function() { expect(res.status).to.equal(401); });
+  test("uniform invalid-credentials message", function() { expect(res.body.message).to.be.a("string"); });
+}

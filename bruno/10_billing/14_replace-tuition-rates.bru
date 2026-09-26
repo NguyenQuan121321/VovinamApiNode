@@ -1,0 +1,25 @@
+meta {
+  name: replace tuition rates
+  type: http
+  seq: 14
+}
+
+put {
+  url: {{baseUrl}}/api/v1/admin/billing/settings/tuition-rates
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"rates": [{"classId": "{{basicClassId}}", "monthlyAmount": 420000}]}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("rate applied", function() { expect(res.body.data.tuitionRates[bru.getEnvVar("basicClassId")]).to.equal(420000); });
+}

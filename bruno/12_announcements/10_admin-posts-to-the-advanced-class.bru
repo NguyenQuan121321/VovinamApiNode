@@ -1,0 +1,29 @@
+meta {
+  name: admin posts to the advanced class
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "UAT advanced notice", "body": "Advanced only", "audience": "CLASS", "classId": "{{advancedClassId}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("advancedAnnouncementId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

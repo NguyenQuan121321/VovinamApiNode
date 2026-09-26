@@ -1,0 +1,20 @@
+meta {
+  name: remove the enrollment (soft leave)
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/enrollments/{{enrollmentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("left flag", function() { expect(res.body.data.left).to.equal(true); });
+}

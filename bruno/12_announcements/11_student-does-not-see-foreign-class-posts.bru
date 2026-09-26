@@ -1,0 +1,20 @@
+meta {
+  name: student does not see foreign class posts
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v1/announcements
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("advanced class hidden", function() { expect(res.body.data.items.some(function(a){ return a.id === bru.getEnvVar("advancedAnnouncementId"); })).to.equal(false); });
+}

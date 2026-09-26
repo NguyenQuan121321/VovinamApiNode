@@ -1,0 +1,25 @@
+meta {
+  name: student edits own contact fields
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/students/me
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"phone": "0901119999"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("phone updated", function() { expect(res.body.data.phone).to.equal("0901119999"); });
+}

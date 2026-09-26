@@ -1,0 +1,25 @@
+meta {
+  name: open the exams for registration
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/belt-exams/{{passExamId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "OPEN"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("OPEN", function() { expect(res.body.data.status).to.equal("OPEN"); });
+}

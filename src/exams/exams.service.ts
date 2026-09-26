@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
 import { StudentOwnershipService } from '../students/student-ownership.service';
 import { BillingService } from '../billing/billing.service';
+import { nextSequentialCode } from '../billing/sequential-code';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import type {
   CreateBeltExamDto,
@@ -248,6 +249,12 @@ export class ExamsService {
       if (registration === null) {
         throw new NotFoundException('Not found');
       }
+      // Guard 7.3: an instructor may only record results of students currently
+      // enrolled in classes they teach — foreign/unknown students answer the
+      // uniform 404 (found missing by the independent security review).
+      if (caller.role !== 'ADMIN') {
+        await this.ownership.assertCanAccess(caller, registration.studentId);
+      }
       if (registration.status === 'RESULT_PASS' || registration.status === 'RESULT_FAIL') {
         throw new ConflictException('Result already recorded');
       }
@@ -329,13 +336,15 @@ export class ExamsService {
     const year = new Date().getUTCFullYear();
     const prefix = `EXAM-${year}-`;
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const last = await this.prisma.beltExam.findFirst({
+      const rows = await this.prisma.beltExam.findMany({
         where: { code: { startsWith: prefix } },
-        orderBy: { code: 'desc' },
         select: { code: true },
       });
-      const seq = last === null ? 1 : Number.parseInt(last.code.slice(prefix.length), 10) + 1;
-      const code = `${prefix}${String(seq).padStart(2, '0')}`;
+      const code = nextSequentialCode(
+        prefix,
+        rows.map((row) => row.code),
+        2,
+      );
       const clash = await this.prisma.beltExam.findUnique({ where: { code } });
       if (clash === null) {
         return code;

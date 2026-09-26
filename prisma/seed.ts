@@ -80,9 +80,16 @@ async function main(): Promise<void> {
   } else {
     assertSeedPasswordPolicy(password, email);
     // Empty update: an existing admin (possibly with MFA enabled) is never overwritten.
+    // The account is born verified: there is no self-verify flow for a seeded
+    // bootstrap account, and login requires a verified email.
     await prisma.user.upsert({
       where: { email },
-      create: { email, passwordHash: await bcrypt.hash(password, 10), role: 'ADMIN' },
+      create: {
+        email,
+        passwordHash: await bcrypt.hash(password, 10),
+        role: 'ADMIN',
+        emailVerifiedAt: new Date(),
+      },
       update: {},
     });
     console.info(`Seeded admin ${email}`);
@@ -335,14 +342,33 @@ async function seedDemoDataset(): Promise<void> {
   });
 
   const rateKey = `${thisYear}-${String(thisMonth).padStart(2, '0')}`;
+  // The base bootstrap above already created both keys with empty values, so
+  // these upserts must WRITE on update too — a no-op update left the demo
+  // dataset without rates or a usable receiving account (found by UAT).
+  const demoRates = { [basicClass.id]: 400000, [advancedClass.id]: 500000 };
   await prisma.appSetting.upsert({
     where: { key: 'tuition_rates' },
     create: {
       key: 'tuition_rates',
-      value: { [basicClass.id]: 400000, [advancedClass.id]: 500000 },
+      value: demoRates,
       updatedBy: admin.id,
     },
-    update: {},
+    update: { value: demoRates, updatedBy: admin.id },
+  });
+  const demoBankAccount = {
+    owner_type: 'BUSINESS',
+    bin: '970422',
+    number: '9012345678901',
+    name: 'VOVINAM DEMO CLUB',
+  };
+  await prisma.appSetting.upsert({
+    where: { key: 'bank_account' },
+    create: {
+      key: 'bank_account',
+      value: demoBankAccount,
+      updatedBy: admin.id,
+    },
+    update: { value: demoBankAccount, updatedBy: admin.id },
   });
   await prisma.invoice.createMany({
     data: [

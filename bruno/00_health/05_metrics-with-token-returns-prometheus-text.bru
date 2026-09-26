@@ -1,0 +1,20 @@
+meta {
+  name: metrics with token returns prometheus text
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/metrics
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{metricsToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("content type is prometheus text", function() { expect(String(res.headers["content-type"]||"")).to.contain("text/plain"); });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: admin audit log
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/audit-log
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("paginated shape", function() { expect(res.body.data.items).to.be.an("array");
+expect(res.body.data.total).to.be.a("number"); });
+}
+
+docs {
+  Audit rows are written by an async batcher (50 entries or shutdown); immediate reads may be empty — see the known-limitation note in BRUNO_UAT.md.
+}

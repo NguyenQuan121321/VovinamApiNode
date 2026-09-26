@@ -1,0 +1,21 @@
+meta {
+  name: student reads own attendance history
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/students/{{studentId}}/attendance?from=2026-09-01
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("history includes seeded and new records", function() { expect(res.body.data.total).to.be.at.least(3); });
+  test("history carries class names", function() { expect(res.body.data.items[0].className).to.be.a("string"); });
+}

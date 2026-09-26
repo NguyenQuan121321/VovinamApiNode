@@ -1,0 +1,24 @@
+meta {
+  name: club-wide announcement cannot target a class
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/announcements
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "Bad", "body": "x", "audience": "ALL", "classId": "{{basicClassId}}"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

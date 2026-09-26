@@ -1,0 +1,29 @@
+meta {
+  name: admin creates a capacity-1 exam
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "UAT Exam Full", "examDate": "2027-06-30", "targetRankId": "{{vang1Id}}", "feeAmount": 100000, "registrationDeadline": "2027-06-20", "capacity": 1}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("fullExamId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

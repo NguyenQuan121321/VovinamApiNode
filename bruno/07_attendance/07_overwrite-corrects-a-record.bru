@@ -1,0 +1,25 @@
+meta {
+  name: overwrite corrects a record
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/attendance-sessions/{{attendanceSessionId}}/records
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"records": [{"studentId": "{{studentId}}", "status": "EXCUSED", "note": "left early"}]}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("status overwritten", function() { expect(res.body.data[0].status).to.equal("EXCUSED"); });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: invoice discount cannot exceed subtotal
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/invoices
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "type": "OTHER", "items": [{"description": "x", "quantity": 1, "unitAmount": 100}], "discount": 200}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

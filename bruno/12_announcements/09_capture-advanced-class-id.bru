@@ -1,0 +1,24 @@
+meta {
+  name: capture advanced class id
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classes
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  var adv = res.body.data.items.find(function(c){ return c.name.indexOf("Nang cao") >= 0; });
+  if(adv) bru.setEnvVar("advancedClassId", adv.id);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

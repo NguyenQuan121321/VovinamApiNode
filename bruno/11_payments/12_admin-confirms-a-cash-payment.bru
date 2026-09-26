@@ -1,0 +1,31 @@
+meta {
+  name: admin confirms a cash payment
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/payments/{{manualInvoiceId}}/confirm-cash
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"note": "UAT cash at dojo"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("cashPaymentId", data.id);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("cash settlement recorded", function() { expect(res.body.data.gateway).to.equal("CASH");
+expect(res.body.data.status).to.equal("SUCCESS"); });
+}

@@ -1,0 +1,29 @@
+meta {
+  name: parent requests a leave for a linked child
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/leave-requests
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{minorBId}}", "classId": "{{basicClassId}}", "sessionDate": "2026-09-26", "reason": "family matter"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("leaveParentId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

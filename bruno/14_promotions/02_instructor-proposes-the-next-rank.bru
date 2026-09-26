@@ -1,0 +1,39 @@
+meta {
+  name: instructor proposes the next rank
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/promotion-proposals
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructorToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}", "proposedRankId": "{{nextRankId}}", "note": "UAT ready"}
+}
+
+script:pre-request {
+  var ranks = JSON.parse(bru.getEnvVar("beltRanks"));
+  var current = Number(bru.getEnvVar("beltBeforeProposal"));
+  var curRank = ranks.find(function(r){ return r.id === current; });
+  var next = ranks.filter(function(r){ return r.orderIndex > (curRank ? curRank.orderIndex : 0) && r.isActive; })
+                  .sort(function(a,b){ return a.orderIndex - b.orderIndex; })[0];
+  bru.setEnvVar("nextRankId", String(next.id));
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("proposalId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("proposal pending", function() { expect(res.body.data.status).to.equal("PENDING"); });
+}

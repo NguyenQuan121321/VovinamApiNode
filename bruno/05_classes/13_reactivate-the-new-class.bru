@@ -1,0 +1,24 @@
+meta {
+  name: reactivate the new class
+  type: http
+  seq: 13
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/classes/{{newClassId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"status": "ACTIVE"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+}

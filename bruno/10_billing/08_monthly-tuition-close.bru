@@ -1,0 +1,29 @@
+meta {
+  name: monthly tuition close
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/billing/generate-monthly
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"month": 9, "year": 2026, "classIds": ["{{basicClassId}}"]}
+}
+
+script:post-response {
+  console.log('MONTHLY-CLOSE:', JSON.stringify(res.body.data));
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("run result reported", function() { expect(res.body.data.created + res.body.data.skippedExisting).to.be.at.least(1); });
+}

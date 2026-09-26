@@ -1,0 +1,25 @@
+meta {
+  name: student revokes the purpose
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/consent/revoke
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"purpose": "MEDIA_USAGE"}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("revocation stamped", function() { expect(res.body.data.revokedAt).to.not.equal(null); });
+}

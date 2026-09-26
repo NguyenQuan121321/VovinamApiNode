@@ -1,0 +1,28 @@
+meta {
+  name: reusing the claimed code fails uniformly
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/parents/link
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{parentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"inviteCode": "{{newStudentInvite}}"}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}
+
+docs {
+  Single-use: the code was rotated away during the first claim.
+}

@@ -1,0 +1,20 @@
+meta {
+  name: recovery codes remaining
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v1/auth/mfa/totp/recovery-codes
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("all codes still unused", function() { expect(res.body.data.remaining).to.equal(Number(bru.getEnvVar("recoveryCodesLeft"))); });
+}

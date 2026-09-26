@@ -1,0 +1,25 @@
+meta {
+  name: admin starts a QR payment (second invoice)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/payments/qr/{{manualInvoiceId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("qrOrderRef2", data.orderRef);
+  bru.setEnvVar("qrAmount2", String(data.amount));
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

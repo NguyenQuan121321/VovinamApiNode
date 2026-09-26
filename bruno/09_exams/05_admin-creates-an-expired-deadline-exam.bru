@@ -1,0 +1,29 @@
+meta {
+  name: admin creates an expired-deadline exam
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "UAT Exam Late", "examDate": "2027-06-30", "targetRankId": "{{vang1Id}}", "feeAmount": 100000, "registrationDeadline": "2026-09-24"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("lateExamId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+}

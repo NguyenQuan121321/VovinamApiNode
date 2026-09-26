@@ -1,0 +1,24 @@
+meta {
+  name: rank id must be an integer
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/belt-ranks/not-an-int
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"name": "x"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

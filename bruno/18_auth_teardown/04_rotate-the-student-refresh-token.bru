@@ -1,0 +1,33 @@
+meta {
+  name: rotate the student refresh token
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/refresh-token
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {"refreshToken": "{{studentRefresh}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("studentRefresh2", data.refreshToken);
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("new refresh token issued", function() { expect(res.body.data.refreshToken).to.be.a("string"); });
+}
+
+docs {
+  Needs studentRefresh captured at login — see 01_auth student login post-response.
+}

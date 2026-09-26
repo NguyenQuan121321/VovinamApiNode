@@ -1,0 +1,24 @@
+meta {
+  name: class instructor must have INSTRUCTOR role
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classes
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"name": "Bad", "instructorId": "{{adminUserId}}"}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

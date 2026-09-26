@@ -1,0 +1,24 @@
+meta {
+  name: non-author instructor update is a uniform 404
+  type: http
+  seq: 9
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/evaluations/{{evaluationId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{instructor2Token}}
+  content-type: application/json
+}
+
+body:json {
+  {"rating": 1}
+}
+
+tests {
+  test("status 404", function() { expect(res.status).to.equal(404); });
+}

@@ -1,0 +1,30 @@
+meta {
+  name: student grants media usage for self
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/consent
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"purpose": "MEDIA_USAGE"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("consentId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("active grant", function() { expect(res.body.data.active).to.equal(true); });
+}

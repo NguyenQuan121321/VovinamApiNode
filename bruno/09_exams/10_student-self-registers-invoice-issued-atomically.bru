@@ -1,0 +1,34 @@
+meta {
+  name: student self-registers (invoice issued atomically)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams/{{passExamId}}/register
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{studentId}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("passRegId", data.id);
+  bru.setEnvVar("examInvoiceId", data.invoice.id);
+  bru.setEnvVar("examInvoiceTotal", String(data.invoice.total));
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("registration pending", function() { expect(res.body.data.status).to.not.be.oneOf(["RESULT_PASS","RESULT_FAIL"]); });
+  test("EXAM_FEE invoice attached", function() { expect(res.body.data.invoice.total).to.equal(150000);
+expect(res.body.data.invoice.status).to.equal("UNPAID"); });
+}

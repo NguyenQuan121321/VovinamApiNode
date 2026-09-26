@@ -1,0 +1,24 @@
+meta {
+  name: duplicate enrollment conflicts
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/enrollments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{newStudentId}}", "classId": "{{newClassId}}"}
+}
+
+tests {
+  test("status 409", function() { expect(res.status).to.equal(409); });
+}

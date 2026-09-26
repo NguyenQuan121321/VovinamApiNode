@@ -1,0 +1,30 @@
+meta {
+  name: enroll the new student
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/enrollments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"studentId": "{{newStudentId}}", "classId": "{{newClassId}}"}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("enrollmentId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("enrollment open", function() { expect(res.body.data.leftAt).to.equal(null); });
+}

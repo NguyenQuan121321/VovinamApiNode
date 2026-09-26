@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 import { EnvService } from './config/env.service';
 import { PinoLoggerService } from './logging/pino-logger.service';
 import type { RequestWithRawBody } from './common/request-raw-body';
+import { enrichOpenApiDocument } from './openapi/enrich-openapi';
 
 /** Single source of the OpenAPI contract (used by bootstrap and scripts/generate-openapi.ts). */
 export function buildOpenApiDocumentConfig() {
@@ -85,7 +86,7 @@ export async function createApp() {
     SwaggerModule.setup(
       'docs',
       app,
-      SwaggerModule.createDocument(app, buildOpenApiDocumentConfig()),
+      enrichOpenApiDocument(SwaggerModule.createDocument(app, buildOpenApiDocumentConfig())),
       {
         jsonDocumentUrl: 'docs-json',
       },

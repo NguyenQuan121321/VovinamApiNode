@@ -1,0 +1,30 @@
+meta {
+  name: admin creates the PASS exam
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/belt-exams
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"title": "UAT Exam PASS", "examDate": "2027-06-30", "targetRankId": "{{vang1Id}}", "feeAmount": 150000, "registrationDeadline": "2027-06-20", "capacity": 10}
+}
+
+script:post-response {
+  const data = res.body.data;
+  bru.setEnvVar("passExamId", data.id);
+}
+
+tests {
+  test("status 201", function() { expect(res.status).to.equal(201); });
+  test("starts DRAFT", function() { expect(res.body.data.status).to.equal("DRAFT"); });
+}

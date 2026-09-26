@@ -1,0 +1,20 @@
+meta {
+  name: exam catalog readable by students
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/belt-exams
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("seeded demo exam present", function() { expect(res.body.data.items.length).to.be.at.least(1); });
+}

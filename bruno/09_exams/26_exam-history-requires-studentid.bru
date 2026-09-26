@@ -1,0 +1,19 @@
+meta {
+  name: exam history requires studentId
+  type: http
+  seq: 26
+}
+
+get {
+  url: {{baseUrl}}/api/v1/exam-registrations
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentToken}}
+}
+
+tests {
+  test("status 400", function() { expect(res.status).to.equal(400); });
+}

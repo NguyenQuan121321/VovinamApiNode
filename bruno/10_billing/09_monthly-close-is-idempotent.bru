@@ -1,0 +1,26 @@
+meta {
+  name: monthly close is idempotent
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/billing/generate-monthly
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  content-type: application/json
+}
+
+body:json {
+  {"month": 9, "year": 2026, "classIds": ["{{basicClassId}}"]}
+}
+
+tests {
+  test("status 200", function() { expect(res.status).to.equal(200); });
+  test("rerun creates nothing new", function() { expect(res.body.data.created).to.equal(0);
+expect(res.body.data.skippedExisting).to.be.at.least(1); });
+}
