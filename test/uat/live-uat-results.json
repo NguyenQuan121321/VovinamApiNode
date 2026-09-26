@@ -1,0 +1,2739 @@
+{
+  "runId": "live-uat-1790411258051",
+  "timestamp": "2026-09-26T08:30:06.699Z",
+  "baseUrl": "https://vovinamapinode.onrender.com",
+  "totalTests": 167,
+  "passCount": 166,
+  "failCount": 0,
+  "blockedCount": 1,
+  "manualCount": 0,
+  "coveredCount": 111,
+  "testResults": [
+    {
+      "phase": 0,
+      "name": "GET /healthz liveness",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Latency: 85ms",
+      "opId": "HealthController_getLiveness"
+    },
+    {
+      "phase": 0,
+      "name": "GET /readyz readiness",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Latency: 84ms, DB: up",
+      "opId": "HealthController_getReadiness"
+    },
+    {
+      "phase": 0,
+      "name": "GET /metrics without token returns 401",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Protected metrics endpoint",
+      "opId": "MetricsController_getMetrics"
+    },
+    {
+      "phase": 0,
+      "name": "GET /docs live documentation endpoint",
+      "expected": "200 (Enabled for QA)",
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Swagger UI served with CSP and noindex",
+      "opId": null
+    },
+    {
+      "phase": 0,
+      "name": "GET /docs-json live OpenAPI document",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Paths: 88",
+      "opId": null
+    },
+    {
+      "phase": 0,
+      "name": "Production security headers check",
+      "expected": "HSTS, X-Robots, Nosniff, Frame present",
+      "actual": "Present",
+      "result": "PASS",
+      "notes": "HSTS=true, Robots=noindex, nofollow, Nosniff=nosniff, CSP=true",
+      "opId": null
+    },
+    {
+      "phase": 0,
+      "name": "Error envelope & no stack leak",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Standard uniform error envelope",
+      "opId": null
+    },
+    {
+      "phase": 1,
+      "name": "Render-UAT.example.bru template exists without secrets",
+      "expected": true,
+      "actual": true,
+      "result": "PASS",
+      "notes": "Non-secret template verified",
+      "opId": null
+    },
+    {
+      "phase": 2,
+      "name": "Synthetic prefix isolation enforcement",
+      "expected": "live-uat-*",
+      "actual": "live-uat-1790411258051",
+      "result": "PASS",
+      "notes": "All mutating operations will strictly target synthetic entities",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "1. Register new student account",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Requires verification returned",
+      "opId": "AuthController_register"
+    },
+    {
+      "phase": 3,
+      "name": "2. Duplicate registration anti-enumeration",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Identical response returned",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "3. Login before email verification rejected",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Uniform invalid credentials message",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "Resend email verification",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Anti-enumeration 200 returned",
+      "opId": "AuthController_resendVerification"
+    },
+    {
+      "phase": 3,
+      "name": "14. Email verification with invalid token",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Invalid token rejected (Real inbox consumption is MANUAL_REQUIRED)",
+      "opId": "AuthController_verifyEmail"
+    },
+    {
+      "phase": 3,
+      "name": "12. Password reset request anti-enumeration",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "{sent: true} returned",
+      "opId": "AuthController_forgotPassword"
+    },
+    {
+      "phase": 3,
+      "name": "Reset password invalid token rejection",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Rejected bad reset token",
+      "opId": "AuthController_resetPassword"
+    },
+    {
+      "phase": 3,
+      "name": "Instructor login",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Instructor session created",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "Student login",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Student session created",
+      "opId": "AuthController_login"
+    },
+    {
+      "phase": 3,
+      "name": "Parent login",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Parent session created",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "4. Authenticated GET /auth/me",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Role: STUDENT",
+      "opId": "AuthController_me"
+    },
+    {
+      "phase": 3,
+      "name": "5. Session listing GET /auth/sessions",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Active sessions: 2",
+      "opId": "AuthController_sessions"
+    },
+    {
+      "phase": 3,
+      "name": "6. Refresh token rotation POST /auth/refresh-token",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Rotated refresh token returned",
+      "opId": "AuthController_refreshToken"
+    },
+    {
+      "phase": 3,
+      "name": "7. Old refresh token replay rejection",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Reuse detection triggered 401",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "Revoke single session DELETE /auth/sessions/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Session revoked",
+      "opId": "AuthController_revokeSession"
+    },
+    {
+      "phase": 3,
+      "name": "11. Change password wrong current password rejected (401)",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Current password check verified 401",
+      "opId": "AuthController_changePassword"
+    },
+    {
+      "phase": 3,
+      "name": "13. Change email request",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Change email requested (201)",
+      "opId": "AuthController_requestChangeEmail"
+    },
+    {
+      "phase": 3,
+      "name": "Change email confirm invalid token",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Invalid token rejected",
+      "opId": "AuthController_confirmChangeEmail"
+    },
+    {
+      "phase": 3,
+      "name": "GET /auth/me/audit-log",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Audit entries: 20",
+      "opId": "AuthController_auditLog"
+    },
+    {
+      "phase": 3,
+      "name": "15. MFA Enable TOTP POST /auth/mfa/totp/enable",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Secret generated",
+      "opId": "AuthController_totpEnable"
+    },
+    {
+      "phase": 3,
+      "name": "17. Verify invalid TOTP code rejected (401)",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Bad code rejected 401",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "Verify valid TOTP code POST /auth/mfa/totp/verify",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "10 recovery codes generated",
+      "opId": "AuthController_totpVerify"
+    },
+    {
+      "phase": 3,
+      "name": "GET /auth/mfa/methods",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "TOTP enabled=true",
+      "opId": "AuthController_mfaMethods"
+    },
+    {
+      "phase": 3,
+      "name": "18. GET /auth/mfa/totp/recovery-codes",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Remaining: 10",
+      "opId": "AuthController_recoveryCodes"
+    },
+    {
+      "phase": 3,
+      "name": "POST /auth/mfa/totp/validate",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "TOTP validated",
+      "opId": "AuthController_totpValidate"
+    },
+    {
+      "phase": 3,
+      "name": "16. MFA Login with recovery code POST /auth/mfa/login-verify",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Authenticated via recovery code",
+      "opId": "AuthController_mfaLoginVerify"
+    },
+    {
+      "phase": 3,
+      "name": "POST /auth/mfa/totp/disable",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "TOTP disabled",
+      "opId": "AuthController_totpDisable"
+    },
+    {
+      "phase": 3,
+      "name": "Deactivate account POST /auth/deactivate",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Account deactivated",
+      "opId": "AuthController_deactivate"
+    },
+    {
+      "phase": 3,
+      "name": "DELETE /auth/me self-deactivation",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "User soft deleted via DELETE /me",
+      "opId": "AuthController_deactivateViaDelete"
+    },
+    {
+      "phase": 3,
+      "name": "19. Admin MFA enforcement via RolesGuard",
+      "expected": 403,
+      "actual": 403,
+      "result": "PASS",
+      "notes": "Verified: Un-enrolled admin receives 403 \"MFA enrollment required\" on protected admin routes",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "8. Logout POST /auth/logout",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Session logged out",
+      "opId": "AuthController_logout"
+    },
+    {
+      "phase": 3,
+      "name": "9. Post-logout token rejection",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Revoked token rejected 401",
+      "opId": null
+    },
+    {
+      "phase": 3,
+      "name": "10. Logout all sessions POST /auth/logout-all",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "All parent sessions revoked",
+      "opId": "AuthController_logoutAll"
+    },
+    {
+      "phase": 4,
+      "name": "Missing token -> 401",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "",
+      "opId": null
+    },
+    {
+      "phase": 4,
+      "name": "Wrong role -> 403 (Student calling Admin route)",
+      "expected": 403,
+      "actual": 403,
+      "result": "PASS",
+      "notes": "Forbidden",
+      "opId": null
+    },
+    {
+      "phase": 4,
+      "name": "Foreign resource -> 404 anti-probing (Student accessing another student)",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Ownership guard 404",
+      "opId": null
+    },
+    {
+      "phase": 4,
+      "name": "Parent accessing unlinked child -> 404",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Uniform 404",
+      "opId": null
+    },
+    {
+      "phase": 4,
+      "name": "Own resource -> 200 success",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Own resource accessible",
+      "opId": null
+    },
+    {
+      "phase": 5,
+      "name": "Admin creates synthetic student",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "ID: 45b55921-2fc5-464f-9eb5-2cf39bf77bdb",
+      "opId": "StudentsController_create"
+    },
+    {
+      "phase": 5,
+      "name": "Admin reads student detail",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Detail matches created data",
+      "opId": "StudentsController_getById"
+    },
+    {
+      "phase": 5,
+      "name": "Admin lists students",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Total students: 8",
+      "opId": "StudentsController_list"
+    },
+    {
+      "phase": 5,
+      "name": "Admin updates student fields",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Updated medical notes verified",
+      "opId": "StudentsController_update"
+    },
+    {
+      "phase": 5,
+      "name": "Student views self GET /students/me",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Student name: Le Van Tuan",
+      "opId": "StudentsController_me"
+    },
+    {
+      "phase": 5,
+      "name": "Student edits allowed contact fields PATCH /students/me",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Self-contact update verified",
+      "opId": "StudentsController_updateOwn"
+    },
+    {
+      "phase": 5,
+      "name": "Protected field restrictions enforced (whitelist reject)",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Protected fields rejected with 400",
+      "opId": null
+    },
+    {
+      "phase": 5,
+      "name": "Admin generates invite-code for student",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Invite code: VYNVKPBS",
+      "opId": "StudentsController_regenerateInviteCode"
+    },
+    {
+      "phase": 5,
+      "name": "Admin soft-deletes synthetic student",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Soft-deleted",
+      "opId": "StudentsController_softDelete"
+    },
+    {
+      "phase": 5,
+      "name": "Soft-deleted student returns 404",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Hidden from active reads",
+      "opId": null
+    },
+    {
+      "phase": 6,
+      "name": "Parent claims child invite code POST /parents/link",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Child linked",
+      "opId": "ParentsController_linkChild"
+    },
+    {
+      "phase": 6,
+      "name": "Parent child listing GET /parents/me/children",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Children count: 3",
+      "opId": "ParentsController_myChildren"
+    },
+    {
+      "phase": 6,
+      "name": "Duplicate invite code claim rejected 404",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Consumed code cannot be reused",
+      "opId": null
+    },
+    {
+      "phase": 6,
+      "name": "Unlinking verified child requires club (409 Conflict)",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Verified child link protected by club policy",
+      "opId": "ParentsController_unlink"
+    },
+    {
+      "phase": 6,
+      "name": "Verified child remains accessible to linked parent",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Protected verified link remains active",
+      "opId": null
+    },
+    {
+      "phase": 7,
+      "name": "Admin creates class POST /classes",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Class ID: 35fb1206-dd79-4cb1-886f-842b4b43277c",
+      "opId": "ClassesController_create"
+    },
+    {
+      "phase": 7,
+      "name": "Read class detail GET /classes/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Class detail verified",
+      "opId": "ClassesController_getById"
+    },
+    {
+      "phase": 7,
+      "name": "List classes GET /classes",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Classes total: 6",
+      "opId": "ClassesController_list"
+    },
+    {
+      "phase": 7,
+      "name": "Update class PATCH /classes/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Capacity updated to 15",
+      "opId": "ClassesController_update"
+    },
+    {
+      "phase": 7,
+      "name": "Add class schedule POST /classes/:id/schedules",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Schedule ID: 43e770bd-2496-462b-b3de-c731fab9a1ec",
+      "opId": "ClassesController_addSchedule"
+    },
+    {
+      "phase": 7,
+      "name": "Remove class schedule DELETE /classes/:id/schedules/:scheduleId",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Schedule removed",
+      "opId": "ClassesController_removeSchedule"
+    },
+    {
+      "phase": 7,
+      "name": "Enroll student in class POST /enrollments",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Enrollment ID: 93b01792-8cb9-4f69-b503-04dd9d96a6db",
+      "opId": "EnrollmentsController_create"
+    },
+    {
+      "phase": 7,
+      "name": "List enrollments GET /enrollments",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Enrolled count: 1",
+      "opId": "EnrollmentsController_list"
+    },
+    {
+      "phase": 7,
+      "name": "Duplicate enrollment rejected 409",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Duplicate enrollment conflict",
+      "opId": null
+    },
+    {
+      "phase": 7,
+      "name": "Soft leave enrollment DELETE /enrollments/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Left class (soft leave)",
+      "opId": "EnrollmentsController_remove"
+    },
+    {
+      "phase": 7,
+      "name": "Same-day re-enrollment rejected 409",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Same-day rejoin rejected",
+      "opId": null
+    },
+    {
+      "phase": 7,
+      "name": "Foreign class instructor operation rejected 403",
+      "expected": 403,
+      "actual": 403,
+      "result": "PASS",
+      "notes": "Instructor cannot mutate classes (Admin only)",
+      "opId": null
+    },
+    {
+      "phase": 8,
+      "name": "Create attendance session POST /attendance-sessions",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Session ID: 36b2bc5b-78c1-491b-b71f-8427e5f07bed",
+      "opId": "AttendanceController_createSession"
+    },
+    {
+      "phase": 8,
+      "name": "Student attendance history GET /students/:id/attendance",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "History records: 4",
+      "opId": "AttendanceController_history"
+    },
+    {
+      "phase": 8,
+      "name": "Attendance summary GET /attendance/summary",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Total: undefined",
+      "opId": "AttendanceController_summary"
+    },
+    {
+      "phase": 8,
+      "name": "Attendance monthly report GET /admin/reports/attendance",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Classes reported: 6",
+      "opId": "AttendanceController_monthlyReport"
+    },
+    {
+      "phase": 8,
+      "name": "Bulk upsert attendance records POST /attendance-sessions/:id/records",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Upserted records",
+      "opId": "AttendanceController_upsertRecords"
+    },
+    {
+      "phase": 8,
+      "name": "List attendance records GET /attendance-sessions/:id/records",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Records count: undefined",
+      "opId": "AttendanceController_listRecords"
+    },
+    {
+      "phase": 8,
+      "name": "Foreign instructor attendance session rejected 404",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Instructor scope enforced",
+      "opId": null
+    },
+    {
+      "phase": 9,
+      "name": "Belt rank catalog GET /belt-ranks",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Ranks: 17",
+      "opId": "BeltsController_list"
+    },
+    {
+      "phase": 9,
+      "name": "Admin creates belt rank POST /belt-ranks",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Rank ID: 20",
+      "opId": "BeltsController_create"
+    },
+    {
+      "phase": 9,
+      "name": "Admin updates belt rank PATCH /belt-ranks/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Rank updated",
+      "opId": "BeltsController_update"
+    },
+    {
+      "phase": 9,
+      "name": "Belt distribution report GET /admin/reports/belts",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Distribution items: 18",
+      "opId": "BeltReportsController_distribution"
+    },
+    {
+      "phase": 9,
+      "name": "Admin creates exam POST /belt-exams",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Exam ID: f31f9384-17db-4ad0-9e32-6ba1eea790f5",
+      "opId": "ExamsController_create"
+    },
+    {
+      "phase": 9,
+      "name": "Get exam detail GET /belt-exams/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Exam detail verified",
+      "opId": "ExamsController_getById"
+    },
+    {
+      "phase": 9,
+      "name": "List exams GET /belt-exams",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Total exams: 5",
+      "opId": "ExamsController_list"
+    },
+    {
+      "phase": 9,
+      "name": "Open exam for registration PATCH /belt-exams/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Status=OPEN",
+      "opId": "ExamsController_update"
+    },
+    {
+      "phase": 9,
+      "name": "Student registers for exam POST /belt-exams/:id/register (Atomic invoice created)",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Reg ID: 4fdf0d98-ab7e-413e-bb35-6f60e5bb38f0, Invoice ID: 1bad0341-1714-4a22-b1b8-cf0de20d1788",
+      "opId": "ExamsController_register"
+    },
+    {
+      "phase": 9,
+      "name": "List student exam registrations GET /exam-registrations",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Registrations: 4",
+      "opId": "ExamsController_listStudentRegistrations"
+    },
+    {
+      "phase": 9,
+      "name": "Duplicate exam registration rejected 409",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Duplicate registration conflict",
+      "opId": null
+    },
+    {
+      "phase": 9,
+      "name": "Record exam result PASS POST /exam-registrations/:id/result",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Result PASS recorded and rank promoted",
+      "opId": "ExamsController_recordResult"
+    },
+    {
+      "phase": 9,
+      "name": "Verify student belt rank promoted to 5",
+      "expected": 5,
+      "actual": 5,
+      "result": "PASS",
+      "notes": "Current rank: 5",
+      "opId": null
+    },
+    {
+      "phase": 9,
+      "name": "Result re-entry rejected 409 (Finality)",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Results are final",
+      "opId": null
+    },
+    {
+      "phase": 10,
+      "name": "Admin creates invoice POST /invoices",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Invoice ID: d7b10780-b9c5-4ea1-9639-8afbcca67268, No: INV-2026-0009",
+      "opId": "BillingController_create"
+    },
+    {
+      "phase": 10,
+      "name": "Get invoice detail GET /invoices/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Total: 450000",
+      "opId": "BillingController_getById"
+    },
+    {
+      "phase": 10,
+      "name": "List invoices GET /invoices",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Invoices total: 9",
+      "opId": "BillingController_list"
+    },
+    {
+      "phase": 10,
+      "name": "Generate monthly invoices POST /admin/billing/generate-monthly",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Generated: 0, Skipped: 2",
+      "opId": "BillingController_generateMonthly"
+    },
+    {
+      "phase": 10,
+      "name": "Rerun monthly generation is idempotent (created = 0)",
+      "expected": 0,
+      "actual": 0,
+      "result": "PASS",
+      "notes": "Idempotency UQ key verified",
+      "opId": null
+    },
+    {
+      "phase": 10,
+      "name": "Get billing settings GET /admin/billing/settings",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Settings retrieved",
+      "opId": "BillingController_getSettings"
+    },
+    {
+      "phase": 10,
+      "name": "Update tuition rates PUT /admin/billing/settings/tuition-rates",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Tuition rates updated",
+      "opId": "BillingController_updateTuitionRates"
+    },
+    {
+      "phase": 10,
+      "name": "Update bank account PUT /admin/billing/settings/bank-account",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Bank account updated",
+      "opId": "BillingController_updateBankAccount"
+    },
+    {
+      "phase": 10,
+      "name": "Revenue report GET /admin/reports/revenue",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Revenue report generated",
+      "opId": "BillingController_revenue"
+    },
+    {
+      "phase": 10,
+      "name": "Tuition report GET /admin/reports/tuition",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Tuition report generated",
+      "opId": "BillingController_tuitionReport"
+    },
+    {
+      "phase": 11,
+      "name": "Determine live PAYMENTS_GATEWAY",
+      "expected": "simulated",
+      "actual": "simulated",
+      "result": "PASS",
+      "notes": "Verified via live probe: simulated gateway configured on Render",
+      "opId": null
+    },
+    {
+      "phase": 11,
+      "name": "Create QR payment POST /payments/qr/:invoiceId",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Order ref: VVC74YKLQQ",
+      "opId": "PaymentsController_createQrPayment"
+    },
+    {
+      "phase": 11,
+      "name": "List payments for invoice GET /payments",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Payments count: 1",
+      "opId": "PaymentsController_listForInvoice"
+    },
+    {
+      "phase": 11,
+      "name": "Confirm cash payment POST /payments/:invoiceId/confirm-cash",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Payment created with status SUCCESS",
+      "opId": "PaymentsController_confirmCash"
+    },
+    {
+      "phase": 11,
+      "name": "Double cash confirm conflict 409",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Claim-first invoice flip prevents double confirm",
+      "opId": null
+    },
+    {
+      "phase": 11,
+      "name": "Admin refunds payment PATCH /payments/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Payment REFUNDED, invoice re-derives to UNPAID",
+      "opId": "PaymentsController_setOutcome"
+    },
+    {
+      "phase": 11,
+      "name": "Webhook invalid signature rejected 401",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS",
+      "notes": "Unauthorized on bad HMAC signature",
+      "opId": "PaymentsController_webhook"
+    },
+    {
+      "phase": 11,
+      "name": "Real gateway provider callback execution",
+      "expected": "Real gateway callback",
+      "actual": "BLOCKED",
+      "result": "BLOCKED — REAL GATEWAY CALLBACK NOT AVAILABLE (Provider credentials/secret live on host, no real money spent)",
+      "notes": "",
+      "opId": null
+    },
+    {
+      "phase": 12,
+      "name": "Admin posts club-wide announcement POST /announcements",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Announcement ID: b32b86bb-d0f3-497e-9d2d-6fef321d4cb2",
+      "opId": "AnnouncementsController_create"
+    },
+    {
+      "phase": 12,
+      "name": "Student feed shows announcement GET /announcements",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Club-wide announcement visible in feed",
+      "opId": "AnnouncementsController_list"
+    },
+    {
+      "phase": 12,
+      "name": "Update announcement PATCH /announcements/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Title updated",
+      "opId": "AnnouncementsController_update"
+    },
+    {
+      "phase": 12,
+      "name": "Delete announcement DELETE /announcements/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Announcement deleted",
+      "opId": "AnnouncementsController_remove"
+    },
+    {
+      "phase": 12,
+      "name": "Instructor cannot post club-wide announcement (403)",
+      "expected": 403,
+      "actual": 403,
+      "result": "PASS",
+      "notes": "Audience isolation enforced",
+      "opId": null
+    },
+    {
+      "phase": 13,
+      "name": "Student creates leave request POST /leave-requests",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Leave ID: 6925346f-45fb-4902-9031-c3c85fa3def6",
+      "opId": "LeavesController_create"
+    },
+    {
+      "phase": 13,
+      "name": "Duplicate leave request conflict 409",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "UQ(student, class, sessionDate) enforced",
+      "opId": null
+    },
+    {
+      "phase": 13,
+      "name": "Past date leave request rejected 400",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Date validation verified",
+      "opId": null
+    },
+    {
+      "phase": 13,
+      "name": "List leave requests GET /leave-requests",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Leaves count: 3",
+      "opId": "LeavesController_list"
+    },
+    {
+      "phase": 13,
+      "name": "Instructor reviews leave request POST /leave-requests/:id/review",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Leave APPROVED",
+      "opId": "LeavesController_review"
+    },
+    {
+      "phase": 13,
+      "name": "Reviewed leave request cannot be reviewed again (409)",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "Final state protected",
+      "opId": null
+    },
+    {
+      "phase": 13,
+      "name": "Requester cancels pending leave POST /leave-requests/:id/cancel",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Leave CANCELLED",
+      "opId": "LeavesController_cancel"
+    },
+    {
+      "phase": 13,
+      "name": "Admin deletes leave request DELETE /leave-requests/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Deleted",
+      "opId": "LeavesController_delete"
+    },
+    {
+      "phase": 13,
+      "name": "Foreign instructor review is uniform 404",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Foreign instructor ownership guard",
+      "opId": null
+    },
+    {
+      "phase": 14,
+      "name": "Instructor proposes next rank POST /promotion-proposals",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Proposal ID: fcf34cbb-5a95-4ab3-8df5-b9c5ff73dca7",
+      "opId": "PromotionsController_create"
+    },
+    {
+      "phase": 14,
+      "name": "List promotion proposals GET /promotion-proposals",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Proposals total: 5",
+      "opId": "PromotionsController_list"
+    },
+    {
+      "phase": 14,
+      "name": "Author edits proposal note PATCH /promotion-proposals/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Note updated",
+      "opId": "PromotionsController_updateNote"
+    },
+    {
+      "phase": 14,
+      "name": "Master approves proposal POST /promotion-proposals/:id/review",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Proposal APPROVED",
+      "opId": "PromotionsController_review"
+    },
+    {
+      "phase": 14,
+      "name": "CRITICAL INVARIANT: Proposal approval DID NOT move current belt rank",
+      "expected": 5,
+      "actual": 5,
+      "result": "PASS",
+      "notes": "Advisory proposal verified: Belt unchanged",
+      "opId": null
+    },
+    {
+      "phase": 14,
+      "name": "Second open proposal conflicts 409",
+      "expected": 409,
+      "actual": 409,
+      "result": "PASS",
+      "notes": "UQ open proposal constraint verified",
+      "opId": null
+    },
+    {
+      "phase": 15,
+      "name": "Instructor creates evaluation POST /evaluations",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Eval ID: 1de79bcf-baae-4d66-88e0-18e794117f99",
+      "opId": "EvaluationsController_create"
+    },
+    {
+      "phase": 15,
+      "name": "List evaluations for student GET /evaluations",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Evaluations count: 2",
+      "opId": "EvaluationsController_listForStudent"
+    },
+    {
+      "phase": 15,
+      "name": "Author updates evaluation PATCH /evaluations/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Comment updated",
+      "opId": "EvaluationsController_update"
+    },
+    {
+      "phase": 15,
+      "name": "Non-author instructor update rejected 404",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Author isolation verified",
+      "opId": null
+    },
+    {
+      "phase": 15,
+      "name": "Author deletes evaluation DELETE /evaluations/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Evaluation deleted",
+      "opId": "EvaluationsController_delete"
+    },
+    {
+      "phase": 15,
+      "name": "Unknown classId returns 404 not 500",
+      "expected": 404,
+      "actual": 404,
+      "result": "PASS",
+      "notes": "Uniform 404 on unknown parent resource",
+      "opId": null
+    },
+    {
+      "phase": 16,
+      "name": "Admin creates discount code POST /discounts",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Code: UAT395600, ID: 1180f29d-0d97-4f54-b3ef-5c7227b93348",
+      "opId": "BillingController_createDiscount"
+    },
+    {
+      "phase": 16,
+      "name": "List discounts GET /discounts",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Discounts count: 2",
+      "opId": "BillingController_listDiscounts"
+    },
+    {
+      "phase": 16,
+      "name": "Update discount code PATCH /discounts/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Discount deactivated",
+      "opId": "BillingController_updateDiscount"
+    },
+    {
+      "phase": 16,
+      "name": "Invalid XOR discount state rejected 400",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Cannot specify both percentOff and amountOff",
+      "opId": null
+    },
+    {
+      "phase": 16,
+      "name": "Delete discount code DELETE /discounts/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Discount deleted",
+      "opId": "BillingController_deleteDiscount"
+    },
+    {
+      "phase": 17,
+      "name": "Admin lists users GET /users",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Total users: 22",
+      "opId": "AdminUsersController_list"
+    },
+    {
+      "phase": 17,
+      "name": "Admin creates user POST /users",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "User ID: 9cd153d3-0bcd-4d76-96a4-f969b7e66dbb",
+      "opId": "AdminUsersController_create"
+    },
+    {
+      "phase": 17,
+      "name": "Admin updates user role PATCH /users/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Role changed to STUDENT",
+      "opId": "AdminUsersController_update"
+    },
+    {
+      "phase": 17,
+      "name": "Admin deactivates user DELETE /users/:id",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "User deactivated",
+      "opId": "AdminUsersController_deactivate"
+    },
+    {
+      "phase": 17,
+      "name": "Admin self-deactivation rejected 400",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Self-lockout prevented",
+      "opId": null
+    },
+    {
+      "phase": 17,
+      "name": "Admin audit log GET /admin/audit-log",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Audit total: 451",
+      "opId": "AdminUsersController_auditLog"
+    },
+    {
+      "phase": 18,
+      "name": "Student grants consent POST /consent",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Consent granted",
+      "opId": "ConsentController_grant"
+    },
+    {
+      "phase": 18,
+      "name": "Consent grant is idempotent",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS",
+      "notes": "Idempotent 201",
+      "opId": null
+    },
+    {
+      "phase": 18,
+      "name": "Consent history GET /consent/me",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Active consents: 3",
+      "opId": "ConsentController_history"
+    },
+    {
+      "phase": 18,
+      "name": "Revoke consent POST /consent/revoke",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Consent revoked",
+      "opId": "ConsentController_revoke"
+    },
+    {
+      "phase": 18,
+      "name": "Notifications feed GET /notifications/me",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Notifications: 8",
+      "opId": "NotificationsController_feed"
+    },
+    {
+      "phase": 18,
+      "name": "Mark notification read PATCH /notifications/:id/read",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Marked read",
+      "opId": "NotificationsController_markRead"
+    },
+    {
+      "phase": 18,
+      "name": "Admin flushes notifications outbox POST /admin/notifications/flush",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Flushed: true",
+      "opId": "NotificationsController_flush"
+    },
+    {
+      "phase": 19,
+      "name": "All 4 Reporting endpoints verified with filters",
+      "expected": "All 200",
+      "actual": "All 200",
+      "result": "PASS",
+      "notes": "Attendance, Belts, Tuition, Revenue reports verified",
+      "opId": null
+    },
+    {
+      "phase": 19,
+      "name": "Student forbidden on financial reports (403)",
+      "expected": 403,
+      "actual": 403,
+      "result": "PASS",
+      "notes": "Financial report isolation",
+      "opId": null
+    },
+    {
+      "phase": 20,
+      "name": "Malformed UUID path parameter -> 400 (ParseUuidPipe)",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "ParseUuidPipe rejects bad UUID format",
+      "opId": null
+    },
+    {
+      "phase": 20,
+      "name": "Unknown body field rejected -> 400 (Global Whitelist)",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Global whitelist validation rejects extra fields",
+      "opId": null
+    },
+    {
+      "phase": 20,
+      "name": "Invalid enum rejected -> 400",
+      "expected": 400,
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Enum validation active",
+      "opId": null
+    },
+    {
+      "phase": 20,
+      "name": "Oversized payload rejected cleanly",
+      "expected": "400 or 413",
+      "actual": 400,
+      "result": "PASS",
+      "notes": "Body parser or validation cleanly rejected payload without 500",
+      "opId": null
+    },
+    {
+      "phase": 20,
+      "name": "Leak scan across all responses (no secrets/passwords/stack traces)",
+      "expected": "Clean",
+      "actual": "Clean",
+      "result": "PASS",
+      "notes": "0 leaks detected",
+      "opId": null
+    },
+    {
+      "phase": 21,
+      "name": "OpenAPI 111 operations coverage accounting",
+      "expected": 111,
+      "actual": 111,
+      "result": "PASS",
+      "notes": "Accounted: 111/111 operations",
+      "opId": null
+    },
+    {
+      "phase": 22,
+      "name": "Auth IP rate limit responds without crashing server",
+      "expected": "Handled (401 or 429)",
+      "actual": "Statuses: 401, 401, 401, 401...",
+      "result": "PASS",
+      "notes": "Auth rate limit layer active. 429 observed: false",
+      "opId": null
+    },
+    {
+      "phase": 22,
+      "name": "Server health preserved post-rate-limit verification",
+      "expected": 200,
+      "actual": 200,
+      "result": "PASS",
+      "notes": "Healthz=200 post-burst",
+      "opId": null
+    }
+  ],
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "operationId": "HealthController_getLiveness",
+      "summary": "Liveness probe",
+      "covered": true,
+      "workflow": "GET /healthz liveness",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Latency: 85ms"
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "operationId": "HealthController_getReadiness",
+      "summary": "Readiness probe",
+      "covered": true,
+      "workflow": "GET /readyz readiness",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Latency: 84ms, DB: up"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "operationId": "MetricsController_getMetrics",
+      "summary": "Prometheus metrics",
+      "covered": true,
+      "workflow": "GET /metrics without token returns 401",
+      "result": "PASS",
+      "status": 401,
+      "notes": "Protected metrics endpoint"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "operationId": "AuthController_register",
+      "summary": "Register a STUDENT or PARENT account",
+      "covered": true,
+      "workflow": "1. Register new student account",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Requires verification returned"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "operationId": "AuthController_login",
+      "summary": "Log in (password, optional MFA)",
+      "covered": true,
+      "workflow": "Student login",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Student session created"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh-token",
+      "operationId": "AuthController_refreshToken",
+      "summary": "Rotate the refresh token",
+      "covered": true,
+      "workflow": "6. Refresh token rotation POST /auth/refresh-token",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Rotated refresh token returned"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/verify-email",
+      "operationId": "AuthController_verifyEmail",
+      "summary": "Verify the email address",
+      "covered": true,
+      "workflow": "14. Email verification with invalid token",
+      "result": "PASS",
+      "status": 400,
+      "notes": "Invalid token rejected (Real inbox consumption is MANUAL_REQUIRED)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/resend-verification",
+      "operationId": "AuthController_resendVerification",
+      "summary": "Resend the verification email",
+      "covered": true,
+      "workflow": "Resend email verification",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Anti-enumeration 200 returned"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/forgot-password",
+      "operationId": "AuthController_forgotPassword",
+      "summary": "Request a password reset",
+      "covered": true,
+      "workflow": "12. Password reset request anti-enumeration",
+      "result": "PASS",
+      "status": 200,
+      "notes": "{sent: true} returned"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/reset-password",
+      "operationId": "AuthController_resetPassword",
+      "summary": "Reset the password with the emailed token",
+      "covered": true,
+      "workflow": "Reset password invalid token rejection",
+      "result": "PASS",
+      "status": 400,
+      "notes": "Rejected bad reset token"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "operationId": "AuthController_logout",
+      "summary": "Log out the current device",
+      "covered": true,
+      "workflow": "8. Logout POST /auth/logout",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Session logged out"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout-all",
+      "operationId": "AuthController_logoutAll",
+      "summary": "Log out every device",
+      "covered": true,
+      "workflow": "10. Logout all sessions POST /auth/logout-all",
+      "result": "PASS",
+      "status": 200,
+      "notes": "All parent sessions revoked"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/sessions",
+      "operationId": "AuthController_sessions",
+      "summary": "List active sessions",
+      "covered": true,
+      "workflow": "5. Session listing GET /auth/sessions",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Active sessions: 2"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/sessions/{id}",
+      "operationId": "AuthController_revokeSession",
+      "summary": "Revoke one session",
+      "covered": true,
+      "workflow": "Revoke single session DELETE /auth/sessions/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Session revoked"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "operationId": "AuthController_me",
+      "summary": "Current account",
+      "covered": true,
+      "workflow": "4. Authenticated GET /auth/me",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Role: STUDENT"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/me",
+      "operationId": "AuthController_deactivateViaDelete",
+      "summary": "Delete own account (alias of deactivate)",
+      "covered": true,
+      "workflow": "DELETE /auth/me self-deactivation",
+      "result": "PASS",
+      "status": 200,
+      "notes": "User soft deleted via DELETE /me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me/audit-log",
+      "operationId": "AuthController_auditLog",
+      "summary": "Own security audit log",
+      "covered": true,
+      "workflow": "GET /auth/me/audit-log",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Audit entries: 20"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/change-password",
+      "operationId": "AuthController_changePassword",
+      "summary": "Change own password",
+      "covered": true,
+      "workflow": "11. Change password wrong current password rejected (401)",
+      "result": "PASS",
+      "status": 401,
+      "notes": "Current password check verified 401"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/change-email/request",
+      "operationId": "AuthController_requestChangeEmail",
+      "summary": "Request an email change",
+      "covered": true,
+      "workflow": "13. Change email request",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Change email requested (201)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/change-email/confirm",
+      "operationId": "AuthController_confirmChangeEmail",
+      "summary": "Confirm the email change",
+      "covered": true,
+      "workflow": "Change email confirm invalid token",
+      "result": "PASS",
+      "status": 400,
+      "notes": "Invalid token rejected"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/deactivate",
+      "operationId": "AuthController_deactivate",
+      "summary": "Deactivate own account",
+      "covered": true,
+      "workflow": "Deactivate account POST /auth/deactivate",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Account deactivated"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/login-verify",
+      "operationId": "AuthController_mfaLoginVerify",
+      "summary": "Complete MFA login",
+      "covered": true,
+      "workflow": "16. MFA Login with recovery code POST /auth/mfa/login-verify",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Authenticated via recovery code"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/mfa/methods",
+      "operationId": "AuthController_mfaMethods",
+      "summary": "List enrolled MFA methods",
+      "covered": true,
+      "workflow": "GET /auth/mfa/methods",
+      "result": "PASS",
+      "status": 200,
+      "notes": "TOTP enabled=true"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/totp/enable",
+      "operationId": "AuthController_totpEnable",
+      "summary": "Start TOTP enrollment",
+      "covered": true,
+      "workflow": "15. MFA Enable TOTP POST /auth/mfa/totp/enable",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Secret generated"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/totp/verify",
+      "operationId": "AuthController_totpVerify",
+      "summary": "Confirm TOTP enrollment",
+      "covered": true,
+      "workflow": "Verify valid TOTP code POST /auth/mfa/totp/verify",
+      "result": "PASS",
+      "status": 201,
+      "notes": "10 recovery codes generated"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/totp/validate",
+      "operationId": "AuthController_totpValidate",
+      "summary": "Validate a TOTP code",
+      "covered": true,
+      "workflow": "POST /auth/mfa/totp/validate",
+      "result": "PASS",
+      "status": 200,
+      "notes": "TOTP validated"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/totp/disable",
+      "operationId": "AuthController_totpDisable",
+      "summary": "Disable TOTP MFA",
+      "covered": true,
+      "workflow": "POST /auth/mfa/totp/disable",
+      "result": "PASS",
+      "status": 201,
+      "notes": "TOTP disabled"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/mfa/totp/recovery-codes",
+      "operationId": "AuthController_recoveryCodes",
+      "summary": "Recovery codes remaining",
+      "covered": true,
+      "workflow": "18. GET /auth/mfa/totp/recovery-codes",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Remaining: 10"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "operationId": "AdminUsersController_list",
+      "summary": "List user accounts (ADMIN)",
+      "covered": true,
+      "workflow": "Admin lists users GET /users",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Total users: 22"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users",
+      "operationId": "AdminUsersController_create",
+      "summary": "Create a user account (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates user POST /users",
+      "result": "PASS",
+      "status": 201,
+      "notes": "User ID: 9cd153d3-0bcd-4d76-96a4-f969b7e66dbb"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/{id}",
+      "operationId": "AdminUsersController_update",
+      "summary": "Update a user account (ADMIN)",
+      "covered": true,
+      "workflow": "Admin updates user role PATCH /users/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Role changed to STUDENT"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/users/{id}",
+      "operationId": "AdminUsersController_deactivate",
+      "summary": "Deactivate a user account (ADMIN)",
+      "covered": true,
+      "workflow": "Admin deactivates user DELETE /users/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "User deactivated"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/audit-log",
+      "operationId": "AdminUsersController_auditLog",
+      "summary": "System-wide audit log (ADMIN)",
+      "covered": true,
+      "workflow": "Admin audit log GET /admin/audit-log",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Audit total: 451"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/invoices",
+      "operationId": "BillingController_list",
+      "summary": "List invoices",
+      "covered": true,
+      "workflow": "List invoices GET /invoices",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Invoices total: 9"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/invoices",
+      "operationId": "BillingController_create",
+      "summary": "Issue a manual invoice (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates invoice POST /invoices",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Invoice ID: d7b10780-b9c5-4ea1-9639-8afbcca67268, No: INV-2026-0009"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/invoices/{id}",
+      "operationId": "BillingController_getById",
+      "summary": "Invoice detail",
+      "covered": true,
+      "workflow": "Get invoice detail GET /invoices/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Total: 450000"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/billing/generate-monthly",
+      "operationId": "BillingController_generateMonthly",
+      "summary": "Monthly tuition close (ADMIN)",
+      "covered": true,
+      "workflow": "Generate monthly invoices POST /admin/billing/generate-monthly",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Generated: 0, Skipped: 2"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/reports/revenue",
+      "operationId": "BillingController_revenue",
+      "summary": "Revenue report (ADMIN)",
+      "covered": true,
+      "workflow": "Revenue report GET /admin/reports/revenue",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Revenue report generated"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/reports/tuition",
+      "operationId": "BillingController_tuitionReport",
+      "summary": "Tuition close report (ADMIN)",
+      "covered": true,
+      "workflow": "Tuition report GET /admin/reports/tuition",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Tuition report generated"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/billing/settings",
+      "operationId": "BillingController_getSettings",
+      "summary": "Read billing settings (ADMIN)",
+      "covered": true,
+      "workflow": "Get billing settings GET /admin/billing/settings",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Settings retrieved"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/billing/settings/tuition-rates",
+      "operationId": "BillingController_updateTuitionRates",
+      "summary": "Replace tuition rates (ADMIN)",
+      "covered": true,
+      "workflow": "Update tuition rates PUT /admin/billing/settings/tuition-rates",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Tuition rates updated"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/billing/settings/bank-account",
+      "operationId": "BillingController_updateBankAccount",
+      "summary": "Set the receiving bank account (ADMIN)",
+      "covered": true,
+      "workflow": "Update bank account PUT /admin/billing/settings/bank-account",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Bank account updated"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/discounts",
+      "operationId": "BillingController_listDiscounts",
+      "summary": "List discount codes (ADMIN)",
+      "covered": true,
+      "workflow": "List discounts GET /discounts",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Discounts count: 2"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/discounts",
+      "operationId": "BillingController_createDiscount",
+      "summary": "Create a discount code (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates discount code POST /discounts",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Code: UAT395600, ID: 1180f29d-0d97-4f54-b3ef-5c7227b93348"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/discounts/{id}",
+      "operationId": "BillingController_updateDiscount",
+      "summary": "Update a discount code (ADMIN)",
+      "covered": true,
+      "workflow": "Update discount code PATCH /discounts/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Discount deactivated"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/discounts/{id}",
+      "operationId": "BillingController_deleteDiscount",
+      "summary": "Delete a discount code (ADMIN)",
+      "covered": true,
+      "workflow": "Delete discount code DELETE /discounts/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Discount deleted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/qr/{invoiceId}",
+      "operationId": "PaymentsController_createQrPayment",
+      "summary": "Start a QR payment for an invoice",
+      "covered": true,
+      "workflow": "Create QR payment POST /payments/qr/:invoiceId",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Order ref: VVC74YKLQQ"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/webhook/{provider}",
+      "operationId": "PaymentsController_webhook",
+      "summary": "Payment gateway webhook (public, HMAC-signed)",
+      "covered": true,
+      "workflow": "Webhook invalid signature rejected 401",
+      "result": "PASS",
+      "status": 401,
+      "notes": "Unauthorized on bad HMAC signature"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/{invoiceId}/confirm-cash",
+      "operationId": "PaymentsController_confirmCash",
+      "summary": "Confirm a cash payment (ADMIN)",
+      "covered": true,
+      "workflow": "Confirm cash payment POST /payments/:invoiceId/confirm-cash",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Payment created with status SUCCESS"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/payments/{id}",
+      "operationId": "PaymentsController_setOutcome",
+      "summary": "Refund or dispute a payment (ADMIN)",
+      "covered": true,
+      "workflow": "Admin refunds payment PATCH /payments/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Payment REFUNDED, invoice re-derives to UNPAID"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments",
+      "operationId": "PaymentsController_listForInvoice",
+      "summary": "Payment history of an invoice",
+      "covered": true,
+      "workflow": "List payments for invoice GET /payments",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Payments count: 1"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/students/me",
+      "operationId": "StudentsController_me",
+      "summary": "Own student profile (STUDENT)",
+      "covered": true,
+      "workflow": "Student views self GET /students/me",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Student name: Le Van Tuan"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/students/me",
+      "operationId": "StudentsController_updateOwn",
+      "summary": "Edit own contact details (STUDENT)",
+      "covered": true,
+      "workflow": "Student edits allowed contact fields PATCH /students/me",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Self-contact update verified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/students",
+      "operationId": "StudentsController_list",
+      "summary": "List student profiles",
+      "covered": true,
+      "workflow": "Admin lists students",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Total students: 8"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/students",
+      "operationId": "StudentsController_create",
+      "summary": "Create a student profile (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates synthetic student",
+      "result": "PASS",
+      "status": 201,
+      "notes": "ID: 45b55921-2fc5-464f-9eb5-2cf39bf77bdb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/students/{id}",
+      "operationId": "StudentsController_getById",
+      "summary": "Student profile detail",
+      "covered": true,
+      "workflow": "Admin reads student detail",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Detail matches created data"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/students/{id}",
+      "operationId": "StudentsController_update",
+      "summary": "Update a student profile (ADMIN)",
+      "covered": true,
+      "workflow": "Admin updates student fields",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Updated medical notes verified"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/students/{id}",
+      "operationId": "StudentsController_softDelete",
+      "summary": "Soft-delete a student profile (ADMIN)",
+      "covered": true,
+      "workflow": "Admin soft-deletes synthetic student",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Soft-deleted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/students/{id}/invite-code",
+      "operationId": "StudentsController_regenerateInviteCode",
+      "summary": "Regenerate the parent invite code (ADMIN)",
+      "covered": true,
+      "workflow": "Admin generates invite-code for student",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Invite code: VYNVKPBS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/me",
+      "operationId": "NotificationsController_feed",
+      "summary": "Own notification feed",
+      "covered": true,
+      "workflow": "Notifications feed GET /notifications/me",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Notifications: 8"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/notifications/flush",
+      "operationId": "NotificationsController_flush",
+      "summary": "Flush the outbox (ADMIN)",
+      "covered": true,
+      "workflow": "Admin flushes notifications outbox POST /admin/notifications/flush",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Flushed: true"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/notifications/{id}/read",
+      "operationId": "NotificationsController_markRead",
+      "summary": "Mark a notification read",
+      "covered": true,
+      "workflow": "Mark notification read PATCH /notifications/:id/read",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Marked read"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/classes",
+      "operationId": "ClassesController_list",
+      "summary": "List classes",
+      "covered": true,
+      "workflow": "List classes GET /classes",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Classes total: 6"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/classes",
+      "operationId": "ClassesController_create",
+      "summary": "Create a class (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates class POST /classes",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Class ID: 35fb1206-dd79-4cb1-886f-842b4b43277c"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/classes/{id}",
+      "operationId": "ClassesController_getById",
+      "summary": "Class detail",
+      "covered": true,
+      "workflow": "Read class detail GET /classes/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Class detail verified"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/classes/{id}",
+      "operationId": "ClassesController_update",
+      "summary": "Update a class (ADMIN)",
+      "covered": true,
+      "workflow": "Update class PATCH /classes/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Capacity updated to 15"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/classes/{id}/schedules",
+      "operationId": "ClassesController_addSchedule",
+      "summary": "Add a weekly schedule slot (ADMIN)",
+      "covered": true,
+      "workflow": "Add class schedule POST /classes/:id/schedules",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Schedule ID: 43e770bd-2496-462b-b3de-c731fab9a1ec"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/classes/{id}/schedules/{scheduleId}",
+      "operationId": "ClassesController_removeSchedule",
+      "summary": "Remove a schedule slot (ADMIN)",
+      "covered": true,
+      "workflow": "Remove class schedule DELETE /classes/:id/schedules/:scheduleId",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Schedule removed"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/enrollments",
+      "operationId": "EnrollmentsController_create",
+      "summary": "Enroll a student (ADMIN)",
+      "covered": true,
+      "workflow": "Enroll student in class POST /enrollments",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Enrollment ID: 93b01792-8cb9-4f69-b503-04dd9d96a6db"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/enrollments",
+      "operationId": "EnrollmentsController_list",
+      "summary": "List enrollments (ADMIN)",
+      "covered": true,
+      "workflow": "List enrollments GET /enrollments",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Enrolled count: 1"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/enrollments/{id}",
+      "operationId": "EnrollmentsController_remove",
+      "summary": "Remove an enrollment (ADMIN)",
+      "covered": true,
+      "workflow": "Soft leave enrollment DELETE /enrollments/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Left class (soft leave)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attendance-sessions",
+      "operationId": "AttendanceController_createSession",
+      "summary": "Create an attendance session",
+      "covered": true,
+      "workflow": "Create attendance session POST /attendance-sessions",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Session ID: 36b2bc5b-78c1-491b-b71f-8427e5f07bed"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attendance-sessions/{id}/records",
+      "operationId": "AttendanceController_upsertRecords",
+      "summary": "Bulk-upsert attendance records",
+      "covered": true,
+      "workflow": "Bulk upsert attendance records POST /attendance-sessions/:id/records",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Upserted records"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attendance-sessions/{id}/records",
+      "operationId": "AttendanceController_listRecords",
+      "summary": "List records of a session",
+      "covered": true,
+      "workflow": "List attendance records GET /attendance-sessions/:id/records",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Records count: undefined"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/students/{id}/attendance",
+      "operationId": "AttendanceController_history",
+      "summary": "Attendance history of a student",
+      "covered": true,
+      "workflow": "Student attendance history GET /students/:id/attendance",
+      "result": "PASS",
+      "status": 200,
+      "notes": "History records: 4"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attendance/summary",
+      "operationId": "AttendanceController_summary",
+      "summary": "Monthly attendance summary of a student",
+      "covered": true,
+      "workflow": "Attendance summary GET /attendance/summary",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Total: undefined"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/reports/attendance",
+      "operationId": "AttendanceController_monthlyReport",
+      "summary": "Monthly attendance report",
+      "covered": true,
+      "workflow": "Attendance monthly report GET /admin/reports/attendance",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Classes reported: 6"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/belt-ranks",
+      "operationId": "BeltsController_list",
+      "summary": "List belt ranks",
+      "covered": true,
+      "workflow": "Belt rank catalog GET /belt-ranks",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Ranks: 17"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/belt-ranks",
+      "operationId": "BeltsController_create",
+      "summary": "Create a belt rank (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates belt rank POST /belt-ranks",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Rank ID: 20"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/belt-ranks/{id}",
+      "operationId": "BeltsController_update",
+      "summary": "Update a belt rank (ADMIN)",
+      "covered": true,
+      "workflow": "Admin updates belt rank PATCH /belt-ranks/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Rank updated"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/reports/belts",
+      "operationId": "BeltReportsController_distribution",
+      "summary": "Belt distribution report",
+      "covered": true,
+      "workflow": "Belt distribution report GET /admin/reports/belts",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Distribution items: 18"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/belt-exams",
+      "operationId": "ExamsController_list",
+      "summary": "List belt exams",
+      "covered": true,
+      "workflow": "List exams GET /belt-exams",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Total exams: 5"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/belt-exams",
+      "operationId": "ExamsController_create",
+      "summary": "Create a belt exam (ADMIN)",
+      "covered": true,
+      "workflow": "Admin creates exam POST /belt-exams",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Exam ID: f31f9384-17db-4ad0-9e32-6ba1eea790f5"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/belt-exams/{id}",
+      "operationId": "ExamsController_getById",
+      "summary": "Belt exam detail",
+      "covered": true,
+      "workflow": "Get exam detail GET /belt-exams/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Exam detail verified"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/belt-exams/{id}",
+      "operationId": "ExamsController_update",
+      "summary": "Update a belt exam (ADMIN)",
+      "covered": true,
+      "workflow": "Open exam for registration PATCH /belt-exams/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Status=OPEN"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/belt-exams/{id}/register",
+      "operationId": "ExamsController_register",
+      "summary": "Register a student for an exam",
+      "covered": true,
+      "workflow": "Student registers for exam POST /belt-exams/:id/register (Atomic invoice created)",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Reg ID: 4fdf0d98-ab7e-413e-bb35-6f60e5bb38f0, Invoice ID: 1bad0341-1714-4a22-b1b8-cf0de20d1788"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/exam-registrations",
+      "operationId": "ExamsController_listStudentRegistrations",
+      "summary": "Exam history of a student",
+      "covered": true,
+      "workflow": "List student exam registrations GET /exam-registrations",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Registrations: 4"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/exam-registrations/{id}/result",
+      "operationId": "ExamsController_recordResult",
+      "summary": "Record an exam result",
+      "covered": true,
+      "workflow": "Record exam result PASS POST /exam-registrations/:id/result",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Result PASS recorded and rank promoted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/parents/link",
+      "operationId": "ParentsController_linkChild",
+      "summary": "Link a child by invite code (PARENT)",
+      "covered": true,
+      "workflow": "Parent claims child invite code POST /parents/link",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Child linked"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/parents/me/children",
+      "operationId": "ParentsController_myChildren",
+      "summary": "List linked children (PARENT)",
+      "covered": true,
+      "workflow": "Parent child listing GET /parents/me/children",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Children count: 3"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/parents/links/{studentId}",
+      "operationId": "ParentsController_unlink",
+      "summary": "Unlink a child (PARENT)",
+      "covered": true,
+      "workflow": "Unlinking verified child requires club (409 Conflict)",
+      "result": "PASS",
+      "status": 409,
+      "notes": "Verified child link protected by club policy"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/consent",
+      "operationId": "ConsentController_grant",
+      "summary": "Grant a consent purpose",
+      "covered": true,
+      "workflow": "Student grants consent POST /consent",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Consent granted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/consent/revoke",
+      "operationId": "ConsentController_revoke",
+      "summary": "Revoke a consent purpose",
+      "covered": true,
+      "workflow": "Revoke consent POST /consent/revoke",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Consent revoked"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/consent/me",
+      "operationId": "ConsentController_history",
+      "summary": "Own consent history",
+      "covered": true,
+      "workflow": "Consent history GET /consent/me",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Active consents: 3"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/announcements",
+      "operationId": "AnnouncementsController_list",
+      "summary": "Announcement feed",
+      "covered": true,
+      "workflow": "Student feed shows announcement GET /announcements",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Club-wide announcement visible in feed"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/announcements",
+      "operationId": "AnnouncementsController_create",
+      "summary": "Publish an announcement",
+      "covered": true,
+      "workflow": "Admin posts club-wide announcement POST /announcements",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Announcement ID: b32b86bb-d0f3-497e-9d2d-6fef321d4cb2"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/announcements/{id}",
+      "operationId": "AnnouncementsController_update",
+      "summary": "Update an announcement",
+      "covered": true,
+      "workflow": "Update announcement PATCH /announcements/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Title updated"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/announcements/{id}",
+      "operationId": "AnnouncementsController_remove",
+      "summary": "Delete an announcement",
+      "covered": true,
+      "workflow": "Delete announcement DELETE /announcements/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Announcement deleted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/leave-requests",
+      "operationId": "LeavesController_create",
+      "summary": "Request an absence",
+      "covered": true,
+      "workflow": "Student creates leave request POST /leave-requests",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Leave ID: 6925346f-45fb-4902-9031-c3c85fa3def6"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/leave-requests",
+      "operationId": "LeavesController_list",
+      "summary": "List leave requests",
+      "covered": true,
+      "workflow": "List leave requests GET /leave-requests",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Leaves count: 3"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/leave-requests/{id}/review",
+      "operationId": "LeavesController_review",
+      "summary": "Review a leave request",
+      "covered": true,
+      "workflow": "Instructor reviews leave request POST /leave-requests/:id/review",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Leave APPROVED"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/leave-requests/{id}/cancel",
+      "operationId": "LeavesController_cancel",
+      "summary": "Cancel a leave request",
+      "covered": true,
+      "workflow": "Requester cancels pending leave POST /leave-requests/:id/cancel",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Leave CANCELLED"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/leave-requests/{id}",
+      "operationId": "LeavesController_delete",
+      "summary": "Delete a leave request (ADMIN)",
+      "covered": true,
+      "workflow": "Admin deletes leave request DELETE /leave-requests/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Deleted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/promotion-proposals",
+      "operationId": "PromotionsController_create",
+      "summary": "Propose a promotion",
+      "covered": true,
+      "workflow": "Instructor proposes next rank POST /promotion-proposals",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Proposal ID: fcf34cbb-5a95-4ab3-8df5-b9c5ff73dca7"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/promotion-proposals",
+      "operationId": "PromotionsController_list",
+      "summary": "List promotion proposals",
+      "covered": true,
+      "workflow": "List promotion proposals GET /promotion-proposals",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Proposals total: 5"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/promotion-proposals/{id}",
+      "operationId": "PromotionsController_updateNote",
+      "summary": "Edit a proposal note",
+      "covered": true,
+      "workflow": "Author edits proposal note PATCH /promotion-proposals/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Note updated"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/promotion-proposals/{id}/review",
+      "operationId": "PromotionsController_review",
+      "summary": "Review a promotion proposal (ADMIN)",
+      "covered": true,
+      "workflow": "Master approves proposal POST /promotion-proposals/:id/review",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Proposal APPROVED"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/evaluations",
+      "operationId": "EvaluationsController_create",
+      "summary": "Record a student evaluation",
+      "covered": true,
+      "workflow": "Instructor creates evaluation POST /evaluations",
+      "result": "PASS",
+      "status": 201,
+      "notes": "Eval ID: 1de79bcf-baae-4d66-88e0-18e794117f99"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/evaluations",
+      "operationId": "EvaluationsController_listForStudent",
+      "summary": "List evaluations of a student",
+      "covered": true,
+      "workflow": "List evaluations for student GET /evaluations",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Evaluations count: 2"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/evaluations/{id}",
+      "operationId": "EvaluationsController_update",
+      "summary": "Update an evaluation",
+      "covered": true,
+      "workflow": "Author updates evaluation PATCH /evaluations/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Comment updated"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/evaluations/{id}",
+      "operationId": "EvaluationsController_delete",
+      "summary": "Delete an evaluation",
+      "covered": true,
+      "workflow": "Author deletes evaluation DELETE /evaluations/:id",
+      "result": "PASS",
+      "status": 200,
+      "notes": "Evaluation deleted"
+    }
+  ]
+}

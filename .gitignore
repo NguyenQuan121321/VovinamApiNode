@@ -18,3 +18,7 @@ tmp/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local UAT secrets
+test/uat/*-secret.txt
+

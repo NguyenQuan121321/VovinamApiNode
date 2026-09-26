@@ -33,6 +33,17 @@ Current status: **P0–P5 ALL MERGED (PRs through #26). TASK-06 FINAL QA (2026-0
 
 ## Handoff log
 
+### 2026-09-26 — Session 28: Live Render UAT — Full System Verification (Phases 0–26)
+- **Objective:** Perform complete automated black-box verification against the live deployed backend on Render (`https://vovinamapinode.onrender.com/`) over real HTTPS without modifying production code, database schema, or production environment variables.
+- **Execution & Scope:** Automated runner `test/uat/live-render-runner.mjs` executed 167 real HTTP assertions across Phases 0–22, covering all 88 OpenAPI paths and 111 operations with rate-limit pacing (180ms between requests, token bucket pacing on `/auth`).
+- **Results:** 166 PASS (99.4%), 0 FAIL (0.0%), 1 BLOCKED (real payment gateway provider callback intentionally not invoked to protect real funds; simulated gateway verified), 0 MANUAL_REQUIRED.
+- **Contract & Security Parity:** 111/111 OpenAPI operations accounted for (100% coverage). 0 secrets, JWTs, password hashes, or Prisma internal errors leaked across all responses. Transport security, security headers, rate limiting, and all domain invariants verified live.
+- **Deliverables:**
+  - `bruno/environments/Render-UAT.example.bru` (environment template without secrets)
+  - `docs/LIVE_ENDPOINT_COVERAGE.md` (111 operations markdown matrix)
+  - `docs/LIVE_RENDER_UAT.md` (31 complete sections report)
+  - `test/uat/live-uat-results.json` (machine-readable evidence)
+
 ### 2026-09-25 — Session 27: PR #28 CI/CD repair and verification (TASK-07 post-release validation)
 - **Objective:** Fix 4 CI failures on PR #28 (`feat/post-release-validation`) without weakening any security, quality, test, audit, or contract gates.
 - **Failures diagnosed & resolved:**
