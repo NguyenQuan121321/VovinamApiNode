@@ -268,6 +268,10 @@ Documented, accepted for now (see §6 for the security-adjacent ones):
 | Contract layer (G1–G7) | `src/openapi/*` (new), all 16 DTO files, `bootstrap.ts`, `scripts/generate-openapi.ts` | `openapi.contract.spec.ts` (12 tests); spectral 0 errors |
 | DTO hardening (S-2, S-3) | `auth/dto/account.dto.ts`, `billing/dto/settings.dto.ts` | regenerated contract; suites green |
 | Bruno UAT collection | `bruno/` (new: 19 folders, 245 requests, env, README) | executed 245/245 / 363/363 |
+| CI repair: @usebruno/cli transitive audit override | `package.json`, `package-lock.json` | `npm audit --audit-level=high` 0 vulnerabilities; `bru --version` 4.2.0 |
+| CI repair: commitlint scopes ('validation', 'uat') | `commitlint.config.js` | `npx commitlint --from c307572 --to HEAD` clean |
+| CI repair: prettier format | `test/e2e/belts-exams.e2e-spec.ts` | `npm run format:check` clean |
+| CI repair: gitleaks token example hygiene | `src/auth/dto/mfa.dto.ts`, `src/openapi/contract.ts`, `openapi.json`, `.gitleaks.toml` | `gitleaks detect --source . --verbose` 0 leaks |
 | Docs | `docs/API_FRONTEND_CONTRACT_AUDIT.md`, `docs/BRUNO_UAT.md`, `docs/POST_RELEASE_VALIDATION.md` (this file) | — |
 
 ## 15. Known Limitations

@@ -27,7 +27,7 @@ export class TotpDisableDto {
 export class MfaLoginVerifyDto {
   @ApiProperty({
     description: 'Short-lived mfaToken returned by POST /auth/login when mfaRequired is true.',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    example: 'EXAMPLE_MFA_TOKEN_NOT_A_SECRET',
   })
   @IsString()
   @Length(10, 1000)

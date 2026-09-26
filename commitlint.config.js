@@ -51,6 +51,8 @@ module.exports = {
         'openapi',
         'seed',
         'scripts',
+        'validation',
+        'uat',
       ],
     ],
   },

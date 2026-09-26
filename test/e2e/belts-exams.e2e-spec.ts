@@ -99,7 +99,10 @@ describe('Belt ranks and exams (e2e)', () => {
     parentBToken = await login(users.parentB);
 
     instructorUserId = (
-      await prisma.user.findUniqueOrThrow({ where: { email: users.instructor }, select: { id: true } })
+      await prisma.user.findUniqueOrThrow({
+        where: { email: users.instructor },
+        select: { id: true },
+      })
     ).id;
   });
 

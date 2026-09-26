@@ -556,7 +556,7 @@ export const CONTRACT: Record<string, OpContract> = {
     auth: 'public',
     data: Tokens,
     errors: [E400, E401, E429],
-    requestExample: { refreshToken: 'cJhbGciOiJIUzI1NiIs...' },
+    requestExample: { refreshToken: 'EXAMPLE_REFRESH_TOKEN_NOT_A_SECRET' },
   },
   'POST /api/v1/auth/verify-email': {
     summary: 'Verify the email address',
@@ -755,7 +755,7 @@ export const CONTRACT: Record<string, OpContract> = {
       },
     },
     errors: [E400, E401, E429],
-    requestExample: { mfaToken: 'eyJhbGciOiJIUzI1NiIs...', code: '492031' },
+    requestExample: { mfaToken: 'EXAMPLE_MFA_TOKEN_NOT_A_SECRET', code: '492031' },
   },
   'GET /api/v1/auth/mfa/methods': {
     summary: 'List enrolled MFA methods',
