@@ -391,6 +391,32 @@ describe('Matrix workflows (e2e)', () => {
       },
       instructorToken,
     ).expect(404);
+
+    // An instructor evaluating for a foreign class answers uniform 404 (finding N3 regression).
+    await send(
+      'post',
+      '/api/v1/evaluations',
+      {
+        studentId: studentProfileId,
+        classId: otherClassId,
+        rating: 7,
+      },
+      instructorToken,
+    ).expect(404);
+
+    // Admin may record an evaluation referencing any valid class.
+    const adminEval = await send(
+      'post',
+      '/api/v1/evaluations',
+      {
+        studentId: studentProfileId,
+        classId: otherClassId,
+        rating: 9,
+        comment: 'Admin evaluation for foreign class',
+      },
+      adminToken,
+    ).expect(201);
+    expect(adminEval.body.data.classId).toBe(otherClassId);
   });
 
   it('discount codes: CRUD, validation, and application on invoices (row 23)', async () => {

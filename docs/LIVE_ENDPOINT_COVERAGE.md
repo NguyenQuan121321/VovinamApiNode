@@ -1,121 +1,136 @@
-# Live Endpoint Coverage (111 Operations)
+# Live OpenAPI Endpoint & Operation Coverage
 
-Base URL: https://vovinamapinode.onrender.com
-Execution Timestamp: 2026-09-26T08:30:06.699Z
-Run ID: live-uat-1790411258051
-Total OpenAPI Operations: 111
-Covered Operations: 111 / 111 (100%)
+**Target Base URL**: `https://vovinamapinode.onrender.com`  
+**Run ID**: `uat-mukgjip5-568eb4`  
+**Execution Timestamp**: `2026-09-27T23:36:30.005Z`  
+**Run Lifecycle Status**: `RUN ABORTED`  
+**Cleanup Status**: `CLEANUP COMPLETED`  
 
-| Method | Endpoint | Workflow | Result | Status | Notes |
-|---|---|---|---|---|---|
-| GET | `/api/v1/admin/audit-log` | Admin audit log GET /admin/audit-log | **PASS** | 200 | Audit total: 451 |
-| POST | `/api/v1/admin/billing/generate-monthly` | Generate monthly invoices POST /admin/billing/generate-monthly | **PASS** | 200 | Generated: 0, Skipped: 2 |
-| GET | `/api/v1/admin/billing/settings` | Get billing settings GET /admin/billing/settings | **PASS** | 200 | Settings retrieved |
-| PUT | `/api/v1/admin/billing/settings/bank-account` | Update bank account PUT /admin/billing/settings/bank-account | **PASS** | 200 | Bank account updated |
-| PUT | `/api/v1/admin/billing/settings/tuition-rates` | Update tuition rates PUT /admin/billing/settings/tuition-rates | **PASS** | 200 | Tuition rates updated |
-| POST | `/api/v1/admin/notifications/flush` | Admin flushes notifications outbox POST /admin/notifications/flush | **PASS** | 200 | Flushed: true |
-| GET | `/api/v1/admin/reports/attendance` | Attendance monthly report GET /admin/reports/attendance | **PASS** | 200 | Classes reported: 6 |
-| GET | `/api/v1/admin/reports/belts` | Belt distribution report GET /admin/reports/belts | **PASS** | 200 | Distribution items: 18 |
-| GET | `/api/v1/admin/reports/revenue` | Revenue report GET /admin/reports/revenue | **PASS** | 200 | Revenue report generated |
-| GET | `/api/v1/admin/reports/tuition` | Tuition report GET /admin/reports/tuition | **PASS** | 200 | Tuition report generated |
-| GET | `/api/v1/announcements` | Student feed shows announcement GET /announcements | **PASS** | 200 | Club-wide announcement visible in feed |
-| POST | `/api/v1/announcements` | Admin posts club-wide announcement POST /announcements | **PASS** | 201 | Announcement ID: b32b86bb-d0f3-497e-9d2d-6fef321d4cb2 |
-| DELETE | `/api/v1/announcements/{id}` | Delete announcement DELETE /announcements/:id | **PASS** | 200 | Announcement deleted |
-| PATCH | `/api/v1/announcements/{id}` | Update announcement PATCH /announcements/:id | **PASS** | 200 | Title updated |
-| POST | `/api/v1/attendance-sessions` | Create attendance session POST /attendance-sessions | **PASS** | 201 | Session ID: 36b2bc5b-78c1-491b-b71f-8427e5f07bed |
-| GET | `/api/v1/attendance-sessions/{id}/records` | List attendance records GET /attendance-sessions/:id/records | **PASS** | 200 | Records count: undefined |
-| POST | `/api/v1/attendance-sessions/{id}/records` | Bulk upsert attendance records POST /attendance-sessions/:id/records | **PASS** | 200 | Upserted records |
-| GET | `/api/v1/attendance/summary` | Attendance summary GET /attendance/summary | **PASS** | 200 | Total: undefined |
-| POST | `/api/v1/auth/change-email/confirm` | Change email confirm invalid token | **PASS** | 400 | Invalid token rejected |
-| POST | `/api/v1/auth/change-email/request` | 13. Change email request | **PASS** | 201 | Change email requested (201) |
-| POST | `/api/v1/auth/change-password` | 11. Change password wrong current password rejected (401) | **PASS** | 401 | Current password check verified 401 |
-| POST | `/api/v1/auth/deactivate` | Deactivate account POST /auth/deactivate | **PASS** | 200 | Account deactivated |
-| POST | `/api/v1/auth/forgot-password` | 12. Password reset request anti-enumeration | **PASS** | 200 | {sent: true} returned |
-| POST | `/api/v1/auth/login` | Student login | **PASS** | 200 | Student session created |
-| POST | `/api/v1/auth/logout` | 8. Logout POST /auth/logout | **PASS** | 200 | Session logged out |
-| POST | `/api/v1/auth/logout-all` | 10. Logout all sessions POST /auth/logout-all | **PASS** | 200 | All parent sessions revoked |
-| DELETE | `/api/v1/auth/me` | DELETE /auth/me self-deactivation | **PASS** | 200 | User soft deleted via DELETE /me |
-| GET | `/api/v1/auth/me` | 4. Authenticated GET /auth/me | **PASS** | 200 | Role: STUDENT |
-| GET | `/api/v1/auth/me/audit-log` | GET /auth/me/audit-log | **PASS** | 200 | Audit entries: 20 |
-| POST | `/api/v1/auth/mfa/login-verify` | 16. MFA Login with recovery code POST /auth/mfa/login-verify | **PASS** | 200 | Authenticated via recovery code |
-| GET | `/api/v1/auth/mfa/methods` | GET /auth/mfa/methods | **PASS** | 200 | TOTP enabled=true |
-| POST | `/api/v1/auth/mfa/totp/disable` | POST /auth/mfa/totp/disable | **PASS** | 201 | TOTP disabled |
-| POST | `/api/v1/auth/mfa/totp/enable` | 15. MFA Enable TOTP POST /auth/mfa/totp/enable | **PASS** | 201 | Secret generated |
-| GET | `/api/v1/auth/mfa/totp/recovery-codes` | 18. GET /auth/mfa/totp/recovery-codes | **PASS** | 200 | Remaining: 10 |
-| POST | `/api/v1/auth/mfa/totp/validate` | POST /auth/mfa/totp/validate | **PASS** | 200 | TOTP validated |
-| POST | `/api/v1/auth/mfa/totp/verify` | Verify valid TOTP code POST /auth/mfa/totp/verify | **PASS** | 201 | 10 recovery codes generated |
-| POST | `/api/v1/auth/refresh-token` | 6. Refresh token rotation POST /auth/refresh-token | **PASS** | 200 | Rotated refresh token returned |
-| POST | `/api/v1/auth/register` | 1. Register new student account | **PASS** | 201 | Requires verification returned |
-| POST | `/api/v1/auth/resend-verification` | Resend email verification | **PASS** | 200 | Anti-enumeration 200 returned |
-| POST | `/api/v1/auth/reset-password` | Reset password invalid token rejection | **PASS** | 400 | Rejected bad reset token |
-| GET | `/api/v1/auth/sessions` | 5. Session listing GET /auth/sessions | **PASS** | 200 | Active sessions: 2 |
-| DELETE | `/api/v1/auth/sessions/{id}` | Revoke single session DELETE /auth/sessions/:id | **PASS** | 200 | Session revoked |
-| POST | `/api/v1/auth/verify-email` | 14. Email verification with invalid token | **PASS** | 400 | Invalid token rejected (Real inbox consumption is MANUAL_REQUIRED) |
-| GET | `/api/v1/belt-exams` | List exams GET /belt-exams | **PASS** | 200 | Total exams: 5 |
-| POST | `/api/v1/belt-exams` | Admin creates exam POST /belt-exams | **PASS** | 201 | Exam ID: f31f9384-17db-4ad0-9e32-6ba1eea790f5 |
-| GET | `/api/v1/belt-exams/{id}` | Get exam detail GET /belt-exams/:id | **PASS** | 200 | Exam detail verified |
-| PATCH | `/api/v1/belt-exams/{id}` | Open exam for registration PATCH /belt-exams/:id | **PASS** | 200 | Status=OPEN |
-| POST | `/api/v1/belt-exams/{id}/register` | Student registers for exam POST /belt-exams/:id/register (Atomic invoice created) | **PASS** | 201 | Reg ID: 4fdf0d98-ab7e-413e-bb35-6f60e5bb38f0, Invoice ID: 1bad0341-1714-4a22-b1b8-cf0de20d1788 |
-| GET | `/api/v1/belt-ranks` | Belt rank catalog GET /belt-ranks | **PASS** | 200 | Ranks: 17 |
-| POST | `/api/v1/belt-ranks` | Admin creates belt rank POST /belt-ranks | **PASS** | 201 | Rank ID: 20 |
-| PATCH | `/api/v1/belt-ranks/{id}` | Admin updates belt rank PATCH /belt-ranks/:id | **PASS** | 200 | Rank updated |
-| GET | `/api/v1/classes` | List classes GET /classes | **PASS** | 200 | Classes total: 6 |
-| POST | `/api/v1/classes` | Admin creates class POST /classes | **PASS** | 201 | Class ID: 35fb1206-dd79-4cb1-886f-842b4b43277c |
-| GET | `/api/v1/classes/{id}` | Read class detail GET /classes/:id | **PASS** | 200 | Class detail verified |
-| PATCH | `/api/v1/classes/{id}` | Update class PATCH /classes/:id | **PASS** | 200 | Capacity updated to 15 |
-| POST | `/api/v1/classes/{id}/schedules` | Add class schedule POST /classes/:id/schedules | **PASS** | 201 | Schedule ID: 43e770bd-2496-462b-b3de-c731fab9a1ec |
-| DELETE | `/api/v1/classes/{id}/schedules/{scheduleId}` | Remove class schedule DELETE /classes/:id/schedules/:scheduleId | **PASS** | 200 | Schedule removed |
-| POST | `/api/v1/consent` | Student grants consent POST /consent | **PASS** | 201 | Consent granted |
-| GET | `/api/v1/consent/me` | Consent history GET /consent/me | **PASS** | 200 | Active consents: 3 |
-| POST | `/api/v1/consent/revoke` | Revoke consent POST /consent/revoke | **PASS** | 200 | Consent revoked |
-| GET | `/api/v1/discounts` | List discounts GET /discounts | **PASS** | 200 | Discounts count: 2 |
-| POST | `/api/v1/discounts` | Admin creates discount code POST /discounts | **PASS** | 201 | Code: UAT395600, ID: 1180f29d-0d97-4f54-b3ef-5c7227b93348 |
-| DELETE | `/api/v1/discounts/{id}` | Delete discount code DELETE /discounts/:id | **PASS** | 200 | Discount deleted |
-| PATCH | `/api/v1/discounts/{id}` | Update discount code PATCH /discounts/:id | **PASS** | 200 | Discount deactivated |
-| GET | `/api/v1/enrollments` | List enrollments GET /enrollments | **PASS** | 200 | Enrolled count: 1 |
-| POST | `/api/v1/enrollments` | Enroll student in class POST /enrollments | **PASS** | 201 | Enrollment ID: 93b01792-8cb9-4f69-b503-04dd9d96a6db |
-| DELETE | `/api/v1/enrollments/{id}` | Soft leave enrollment DELETE /enrollments/:id | **PASS** | 200 | Left class (soft leave) |
-| GET | `/api/v1/evaluations` | List evaluations for student GET /evaluations | **PASS** | 200 | Evaluations count: 2 |
-| POST | `/api/v1/evaluations` | Instructor creates evaluation POST /evaluations | **PASS** | 201 | Eval ID: 1de79bcf-baae-4d66-88e0-18e794117f99 |
-| DELETE | `/api/v1/evaluations/{id}` | Author deletes evaluation DELETE /evaluations/:id | **PASS** | 200 | Evaluation deleted |
-| PATCH | `/api/v1/evaluations/{id}` | Author updates evaluation PATCH /evaluations/:id | **PASS** | 200 | Comment updated |
-| GET | `/api/v1/exam-registrations` | List student exam registrations GET /exam-registrations | **PASS** | 200 | Registrations: 4 |
-| POST | `/api/v1/exam-registrations/{id}/result` | Record exam result PASS POST /exam-registrations/:id/result | **PASS** | 200 | Result PASS recorded and rank promoted |
-| GET | `/api/v1/invoices` | List invoices GET /invoices | **PASS** | 200 | Invoices total: 9 |
-| POST | `/api/v1/invoices` | Admin creates invoice POST /invoices | **PASS** | 201 | Invoice ID: d7b10780-b9c5-4ea1-9639-8afbcca67268, No: INV-2026-0009 |
-| GET | `/api/v1/invoices/{id}` | Get invoice detail GET /invoices/:id | **PASS** | 200 | Total: 450000 |
-| GET | `/api/v1/leave-requests` | List leave requests GET /leave-requests | **PASS** | 200 | Leaves count: 3 |
-| POST | `/api/v1/leave-requests` | Student creates leave request POST /leave-requests | **PASS** | 201 | Leave ID: 6925346f-45fb-4902-9031-c3c85fa3def6 |
-| DELETE | `/api/v1/leave-requests/{id}` | Admin deletes leave request DELETE /leave-requests/:id | **PASS** | 200 | Deleted |
-| POST | `/api/v1/leave-requests/{id}/cancel` | Requester cancels pending leave POST /leave-requests/:id/cancel | **PASS** | 200 | Leave CANCELLED |
-| POST | `/api/v1/leave-requests/{id}/review` | Instructor reviews leave request POST /leave-requests/:id/review | **PASS** | 200 | Leave APPROVED |
-| PATCH | `/api/v1/notifications/{id}/read` | Mark notification read PATCH /notifications/:id/read | **PASS** | 200 | Marked read |
-| GET | `/api/v1/notifications/me` | Notifications feed GET /notifications/me | **PASS** | 200 | Notifications: 8 |
-| POST | `/api/v1/parents/link` | Parent claims child invite code POST /parents/link | **PASS** | 201 | Child linked |
-| DELETE | `/api/v1/parents/links/{studentId}` | Unlinking verified child requires club (409 Conflict) | **PASS** | 409 | Verified child link protected by club policy |
-| GET | `/api/v1/parents/me/children` | Parent child listing GET /parents/me/children | **PASS** | 200 | Children count: 3 |
-| GET | `/api/v1/payments` | List payments for invoice GET /payments | **PASS** | 200 | Payments count: 1 |
-| PATCH | `/api/v1/payments/{id}` | Admin refunds payment PATCH /payments/:id | **PASS** | 200 | Payment REFUNDED, invoice re-derives to UNPAID |
-| POST | `/api/v1/payments/{invoiceId}/confirm-cash` | Confirm cash payment POST /payments/:invoiceId/confirm-cash | **PASS** | 200 | Payment created with status SUCCESS |
-| POST | `/api/v1/payments/qr/{invoiceId}` | Create QR payment POST /payments/qr/:invoiceId | **PASS** | 201 | Order ref: VVC74YKLQQ |
-| POST | `/api/v1/payments/webhook/{provider}` | Webhook invalid signature rejected 401 | **PASS** | 401 | Unauthorized on bad HMAC signature |
-| GET | `/api/v1/promotion-proposals` | List promotion proposals GET /promotion-proposals | **PASS** | 200 | Proposals total: 5 |
-| POST | `/api/v1/promotion-proposals` | Instructor proposes next rank POST /promotion-proposals | **PASS** | 201 | Proposal ID: fcf34cbb-5a95-4ab3-8df5-b9c5ff73dca7 |
-| PATCH | `/api/v1/promotion-proposals/{id}` | Author edits proposal note PATCH /promotion-proposals/:id | **PASS** | 200 | Note updated |
-| POST | `/api/v1/promotion-proposals/{id}/review` | Master approves proposal POST /promotion-proposals/:id/review | **PASS** | 200 | Proposal APPROVED |
-| GET | `/api/v1/students` | Admin lists students | **PASS** | 200 | Total students: 8 |
-| POST | `/api/v1/students` | Admin creates synthetic student | **PASS** | 201 | ID: 45b55921-2fc5-464f-9eb5-2cf39bf77bdb |
-| DELETE | `/api/v1/students/{id}` | Admin soft-deletes synthetic student | **PASS** | 200 | Soft-deleted |
-| GET | `/api/v1/students/{id}` | Admin reads student detail | **PASS** | 200 | Detail matches created data |
-| PATCH | `/api/v1/students/{id}` | Admin updates student fields | **PASS** | 200 | Updated medical notes verified |
-| GET | `/api/v1/students/{id}/attendance` | Student attendance history GET /students/:id/attendance | **PASS** | 200 | History records: 4 |
-| POST | `/api/v1/students/{id}/invite-code` | Admin generates invite-code for student | **PASS** | 200 | Invite code: VYNVKPBS |
-| GET | `/api/v1/students/me` | Student views self GET /students/me | **PASS** | 200 | Student name: Le Van Tuan |
-| PATCH | `/api/v1/students/me` | Student edits allowed contact fields PATCH /students/me | **PASS** | 200 | Self-contact update verified |
-| GET | `/api/v1/users` | Admin lists users GET /users | **PASS** | 200 | Total users: 22 |
-| POST | `/api/v1/users` | Admin creates user POST /users | **PASS** | 201 | User ID: 9cd153d3-0bcd-4d76-96a4-f969b7e66dbb |
-| DELETE | `/api/v1/users/{id}` | Admin deactivates user DELETE /users/:id | **PASS** | 200 | User deactivated |
-| PATCH | `/api/v1/users/{id}` | Admin updates user role PATCH /users/:id | **PASS** | 200 | Role changed to STUDENT |
-| GET | `/healthz` | GET /healthz liveness | **PASS** | 200 | Latency: 85ms |
-| GET | `/metrics` | GET /metrics without token returns 401 | **PASS** | 401 | Protected metrics endpoint |
-| GET | `/readyz` | GET /readyz readiness | **PASS** | 200 | Latency: 84ms, DB: up |
+## 1. Coverage Accounting Summary
+
+| Metric | Count | Percentage |
+|---|---|---|
+| **Total OpenAPI Operations** | 111 | 100.0% |
+| **Executed HTTP Requests** | 3 | 2.7% |
+| **PASS (Executed + Successful Assertion)** | 3 | 2.7% |
+| **FAIL (Executed + Failed Assertion)** | 0 | 0.0% |
+| **BLOCKED (Cannot Safely Execute on Target)** | 0 | 0.0% |
+| **MANUAL_REQUIRED (Requires External Actor / Fixture)** | 0 | 0.0% |
+| **NOT_SAFE_TO_AUTOMATE (Protected Global Config)** | 0 | 0.0% |
+| **UNCOVERED (No Workflow Defined)** | 108 | 97.3% |
+
+## 2. Operations Traceability Matrix
+
+| Method | Endpoint | Operation ID | Executed | Result | Status | Workflow / Notes |
+|---|---|---|---|---|---|---|
+| GET | `/api/v1/admin/audit-log` | `AdminUsersController_auditLog` | NO | **UNCOVERED** | N/A | System-wide audit log (ADMIN) |
+| POST | `/api/v1/admin/billing/generate-monthly` | `BillingController_generateMonthly` | NO | **UNCOVERED** | N/A | Monthly tuition close (ADMIN) |
+| GET | `/api/v1/admin/billing/settings` | `BillingController_getSettings` | NO | **UNCOVERED** | N/A | Read billing settings (ADMIN) |
+| PUT | `/api/v1/admin/billing/settings/bank-account` | `BillingController_updateBankAccount` | NO | **UNCOVERED** | N/A | Set the receiving bank account (ADMIN) |
+| PUT | `/api/v1/admin/billing/settings/tuition-rates` | `BillingController_updateTuitionRates` | NO | **UNCOVERED** | N/A | Replace tuition rates (ADMIN) |
+| POST | `/api/v1/admin/notifications/flush` | `NotificationsController_flush` | NO | **UNCOVERED** | N/A | Flush the outbox (ADMIN) |
+| GET | `/api/v1/admin/reports/attendance` | `AttendanceController_monthlyReport` | NO | **UNCOVERED** | N/A | Monthly attendance report |
+| GET | `/api/v1/admin/reports/belts` | `BeltReportsController_distribution` | NO | **UNCOVERED** | N/A | Belt distribution report |
+| GET | `/api/v1/admin/reports/revenue` | `BillingController_revenue` | NO | **UNCOVERED** | N/A | Revenue report (ADMIN) |
+| GET | `/api/v1/admin/reports/tuition` | `BillingController_tuitionReport` | NO | **UNCOVERED** | N/A | Tuition close report (ADMIN) |
+| GET | `/api/v1/announcements` | `AnnouncementsController_list` | NO | **UNCOVERED** | N/A | Announcement feed |
+| POST | `/api/v1/announcements` | `AnnouncementsController_create` | NO | **UNCOVERED** | N/A | Publish an announcement |
+| DELETE | `/api/v1/announcements/{id}` | `AnnouncementsController_remove` | NO | **UNCOVERED** | N/A | Delete an announcement |
+| PATCH | `/api/v1/announcements/{id}` | `AnnouncementsController_update` | NO | **UNCOVERED** | N/A | Update an announcement |
+| POST | `/api/v1/attendance-sessions` | `AttendanceController_createSession` | NO | **UNCOVERED** | N/A | Create an attendance session |
+| GET | `/api/v1/attendance-sessions/{id}/records` | `AttendanceController_listRecords` | NO | **UNCOVERED** | N/A | List records of a session |
+| POST | `/api/v1/attendance-sessions/{id}/records` | `AttendanceController_upsertRecords` | NO | **UNCOVERED** | N/A | Bulk-upsert attendance records |
+| GET | `/api/v1/attendance/summary` | `AttendanceController_summary` | NO | **UNCOVERED** | N/A | Monthly attendance summary of a student |
+| POST | `/api/v1/auth/change-email/confirm` | `AuthController_confirmChangeEmail` | NO | **UNCOVERED** | N/A | Confirm the email change |
+| POST | `/api/v1/auth/change-email/request` | `AuthController_requestChangeEmail` | NO | **UNCOVERED** | N/A | Request an email change |
+| POST | `/api/v1/auth/change-password` | `AuthController_changePassword` | NO | **UNCOVERED** | N/A | Change own password |
+| POST | `/api/v1/auth/deactivate` | `AuthController_deactivate` | NO | **UNCOVERED** | N/A | Deactivate own account |
+| POST | `/api/v1/auth/forgot-password` | `AuthController_forgotPassword` | NO | **UNCOVERED** | N/A | Request a password reset |
+| POST | `/api/v1/auth/login` | `AuthController_login` | NO | **UNCOVERED** | N/A | Log in (password, optional MFA) |
+| POST | `/api/v1/auth/logout` | `AuthController_logout` | NO | **UNCOVERED** | N/A | Log out the current device |
+| POST | `/api/v1/auth/logout-all` | `AuthController_logoutAll` | NO | **UNCOVERED** | N/A | Log out every device |
+| DELETE | `/api/v1/auth/me` | `AuthController_deactivateViaDelete` | NO | **UNCOVERED** | N/A | Delete own account (alias of deactivate) |
+| GET | `/api/v1/auth/me` | `AuthController_me` | NO | **UNCOVERED** | N/A | Current account |
+| GET | `/api/v1/auth/me/audit-log` | `AuthController_auditLog` | NO | **UNCOVERED** | N/A | Own security audit log |
+| POST | `/api/v1/auth/mfa/login-verify` | `AuthController_mfaLoginVerify` | NO | **UNCOVERED** | N/A | Complete MFA login |
+| GET | `/api/v1/auth/mfa/methods` | `AuthController_mfaMethods` | NO | **UNCOVERED** | N/A | List enrolled MFA methods |
+| POST | `/api/v1/auth/mfa/totp/disable` | `AuthController_totpDisable` | NO | **UNCOVERED** | N/A | Disable TOTP MFA |
+| POST | `/api/v1/auth/mfa/totp/enable` | `AuthController_totpEnable` | NO | **UNCOVERED** | N/A | Start TOTP enrollment |
+| GET | `/api/v1/auth/mfa/totp/recovery-codes` | `AuthController_recoveryCodes` | NO | **UNCOVERED** | N/A | Recovery codes remaining |
+| POST | `/api/v1/auth/mfa/totp/validate` | `AuthController_totpValidate` | NO | **UNCOVERED** | N/A | Validate a TOTP code |
+| POST | `/api/v1/auth/mfa/totp/verify` | `AuthController_totpVerify` | NO | **UNCOVERED** | N/A | Confirm TOTP enrollment |
+| POST | `/api/v1/auth/refresh-token` | `AuthController_refreshToken` | NO | **UNCOVERED** | N/A | Rotate the refresh token |
+| POST | `/api/v1/auth/register` | `AuthController_register` | NO | **UNCOVERED** | N/A | Register a STUDENT or PARENT account |
+| POST | `/api/v1/auth/resend-verification` | `AuthController_resendVerification` | NO | **UNCOVERED** | N/A | Resend the verification email |
+| POST | `/api/v1/auth/reset-password` | `AuthController_resetPassword` | NO | **UNCOVERED** | N/A | Reset the password with the emailed token |
+| GET | `/api/v1/auth/sessions` | `AuthController_sessions` | NO | **UNCOVERED** | N/A | List active sessions |
+| DELETE | `/api/v1/auth/sessions/{id}` | `AuthController_revokeSession` | NO | **UNCOVERED** | N/A | Revoke one session |
+| POST | `/api/v1/auth/verify-email` | `AuthController_verifyEmail` | NO | **UNCOVERED** | N/A | Verify the email address |
+| GET | `/api/v1/belt-exams` | `ExamsController_list` | NO | **UNCOVERED** | N/A | List belt exams |
+| POST | `/api/v1/belt-exams` | `ExamsController_create` | NO | **UNCOVERED** | N/A | Create a belt exam (ADMIN) |
+| GET | `/api/v1/belt-exams/{id}` | `ExamsController_getById` | NO | **UNCOVERED** | N/A | Belt exam detail |
+| PATCH | `/api/v1/belt-exams/{id}` | `ExamsController_update` | NO | **UNCOVERED** | N/A | Update a belt exam (ADMIN) |
+| POST | `/api/v1/belt-exams/{id}/register` | `ExamsController_register` | NO | **UNCOVERED** | N/A | Register a student for an exam |
+| GET | `/api/v1/belt-ranks` | `BeltsController_list` | NO | **UNCOVERED** | N/A | List belt ranks |
+| POST | `/api/v1/belt-ranks` | `BeltsController_create` | NO | **UNCOVERED** | N/A | Create a belt rank (ADMIN) |
+| PATCH | `/api/v1/belt-ranks/{id}` | `BeltsController_update` | NO | **UNCOVERED** | N/A | Update a belt rank (ADMIN) |
+| GET | `/api/v1/classes` | `ClassesController_list` | NO | **UNCOVERED** | N/A | List classes |
+| POST | `/api/v1/classes` | `ClassesController_create` | NO | **UNCOVERED** | N/A | Create a class (ADMIN) |
+| GET | `/api/v1/classes/{id}` | `ClassesController_getById` | NO | **UNCOVERED** | N/A | Class detail |
+| PATCH | `/api/v1/classes/{id}` | `ClassesController_update` | NO | **UNCOVERED** | N/A | Update a class (ADMIN) |
+| POST | `/api/v1/classes/{id}/schedules` | `ClassesController_addSchedule` | NO | **UNCOVERED** | N/A | Add a weekly schedule slot (ADMIN) |
+| DELETE | `/api/v1/classes/{id}/schedules/{scheduleId}` | `ClassesController_removeSchedule` | NO | **UNCOVERED** | N/A | Remove a schedule slot (ADMIN) |
+| POST | `/api/v1/consent` | `ConsentController_grant` | NO | **UNCOVERED** | N/A | Grant a consent purpose |
+| GET | `/api/v1/consent/me` | `ConsentController_history` | NO | **UNCOVERED** | N/A | Own consent history |
+| POST | `/api/v1/consent/revoke` | `ConsentController_revoke` | NO | **UNCOVERED** | N/A | Revoke a consent purpose |
+| GET | `/api/v1/discounts` | `BillingController_listDiscounts` | NO | **UNCOVERED** | N/A | List discount codes (ADMIN) |
+| POST | `/api/v1/discounts` | `BillingController_createDiscount` | NO | **UNCOVERED** | N/A | Create a discount code (ADMIN) |
+| DELETE | `/api/v1/discounts/{id}` | `BillingController_deleteDiscount` | NO | **UNCOVERED** | N/A | Delete a discount code (ADMIN) |
+| PATCH | `/api/v1/discounts/{id}` | `BillingController_updateDiscount` | NO | **UNCOVERED** | N/A | Update a discount code (ADMIN) |
+| GET | `/api/v1/enrollments` | `EnrollmentsController_list` | NO | **UNCOVERED** | N/A | List enrollments (ADMIN) |
+| POST | `/api/v1/enrollments` | `EnrollmentsController_create` | NO | **UNCOVERED** | N/A | Enroll a student (ADMIN) |
+| DELETE | `/api/v1/enrollments/{id}` | `EnrollmentsController_remove` | NO | **UNCOVERED** | N/A | Remove an enrollment (ADMIN) |
+| GET | `/api/v1/evaluations` | `EvaluationsController_listForStudent` | NO | **UNCOVERED** | N/A | List evaluations of a student |
+| POST | `/api/v1/evaluations` | `EvaluationsController_create` | NO | **UNCOVERED** | N/A | Record a student evaluation |
+| DELETE | `/api/v1/evaluations/{id}` | `EvaluationsController_delete` | NO | **UNCOVERED** | N/A | Delete an evaluation |
+| PATCH | `/api/v1/evaluations/{id}` | `EvaluationsController_update` | NO | **UNCOVERED** | N/A | Update an evaluation |
+| GET | `/api/v1/exam-registrations` | `ExamsController_listStudentRegistrations` | NO | **UNCOVERED** | N/A | Exam history of a student |
+| POST | `/api/v1/exam-registrations/{id}/result` | `ExamsController_recordResult` | NO | **UNCOVERED** | N/A | Record an exam result |
+| GET | `/api/v1/invoices` | `BillingController_list` | NO | **UNCOVERED** | N/A | List invoices |
+| POST | `/api/v1/invoices` | `BillingController_create` | NO | **UNCOVERED** | N/A | Issue a manual invoice (ADMIN) |
+| GET | `/api/v1/invoices/{id}` | `BillingController_getById` | NO | **UNCOVERED** | N/A | Invoice detail |
+| GET | `/api/v1/leave-requests` | `LeavesController_list` | NO | **UNCOVERED** | N/A | List leave requests |
+| POST | `/api/v1/leave-requests` | `LeavesController_create` | NO | **UNCOVERED** | N/A | Request an absence |
+| DELETE | `/api/v1/leave-requests/{id}` | `LeavesController_delete` | NO | **UNCOVERED** | N/A | Delete a leave request (ADMIN) |
+| POST | `/api/v1/leave-requests/{id}/cancel` | `LeavesController_cancel` | NO | **UNCOVERED** | N/A | Cancel a leave request |
+| POST | `/api/v1/leave-requests/{id}/review` | `LeavesController_review` | NO | **UNCOVERED** | N/A | Review a leave request |
+| PATCH | `/api/v1/notifications/{id}/read` | `NotificationsController_markRead` | NO | **UNCOVERED** | N/A | Mark a notification read |
+| GET | `/api/v1/notifications/me` | `NotificationsController_feed` | NO | **UNCOVERED** | N/A | Own notification feed |
+| POST | `/api/v1/parents/link` | `ParentsController_linkChild` | NO | **UNCOVERED** | N/A | Link a child by invite code (PARENT) |
+| DELETE | `/api/v1/parents/links/{studentId}` | `ParentsController_unlink` | NO | **UNCOVERED** | N/A | Unlink a child (PARENT) |
+| GET | `/api/v1/parents/me/children` | `ParentsController_myChildren` | NO | **UNCOVERED** | N/A | List linked children (PARENT) |
+| GET | `/api/v1/payments` | `PaymentsController_listForInvoice` | NO | **UNCOVERED** | N/A | Payment history of an invoice |
+| PATCH | `/api/v1/payments/{id}` | `PaymentsController_setOutcome` | NO | **UNCOVERED** | N/A | Refund or dispute a payment (ADMIN) |
+| POST | `/api/v1/payments/{invoiceId}/confirm-cash` | `PaymentsController_confirmCash` | NO | **UNCOVERED** | N/A | Confirm a cash payment (ADMIN) |
+| POST | `/api/v1/payments/qr/{invoiceId}` | `PaymentsController_createQrPayment` | NO | **UNCOVERED** | N/A | Start a QR payment for an invoice |
+| POST | `/api/v1/payments/webhook/{provider}` | `PaymentsController_webhook` | NO | **UNCOVERED** | N/A | Payment gateway webhook (public, HMAC-signed) |
+| GET | `/api/v1/promotion-proposals` | `PromotionsController_list` | NO | **UNCOVERED** | N/A | List promotion proposals |
+| POST | `/api/v1/promotion-proposals` | `PromotionsController_create` | NO | **UNCOVERED** | N/A | Propose a promotion |
+| PATCH | `/api/v1/promotion-proposals/{id}` | `PromotionsController_updateNote` | NO | **UNCOVERED** | N/A | Edit a proposal note |
+| POST | `/api/v1/promotion-proposals/{id}/review` | `PromotionsController_review` | NO | **UNCOVERED** | N/A | Review a promotion proposal (ADMIN) |
+| GET | `/api/v1/students` | `StudentsController_list` | NO | **UNCOVERED** | N/A | List student profiles |
+| POST | `/api/v1/students` | `StudentsController_create` | NO | **UNCOVERED** | N/A | Create a student profile (ADMIN) |
+| DELETE | `/api/v1/students/{id}` | `StudentsController_softDelete` | NO | **UNCOVERED** | N/A | Soft-delete a student profile (ADMIN) |
+| GET | `/api/v1/students/{id}` | `StudentsController_getById` | NO | **UNCOVERED** | N/A | Student profile detail |
+| PATCH | `/api/v1/students/{id}` | `StudentsController_update` | NO | **UNCOVERED** | N/A | Update a student profile (ADMIN) |
+| GET | `/api/v1/students/{id}/attendance` | `AttendanceController_history` | NO | **UNCOVERED** | N/A | Attendance history of a student |
+| POST | `/api/v1/students/{id}/invite-code` | `StudentsController_regenerateInviteCode` | NO | **UNCOVERED** | N/A | Regenerate the parent invite code (ADMIN) |
+| GET | `/api/v1/students/me` | `StudentsController_me` | NO | **UNCOVERED** | N/A | Own student profile (STUDENT) |
+| PATCH | `/api/v1/students/me` | `StudentsController_updateOwn` | NO | **UNCOVERED** | N/A | Edit own contact details (STUDENT) |
+| GET | `/api/v1/users` | `AdminUsersController_list` | NO | **UNCOVERED** | N/A | List user accounts (ADMIN) |
+| POST | `/api/v1/users` | `AdminUsersController_create` | NO | **UNCOVERED** | N/A | Create a user account (ADMIN) |
+| DELETE | `/api/v1/users/{id}` | `AdminUsersController_deactivate` | NO | **UNCOVERED** | N/A | Deactivate a user account (ADMIN) |
+| PATCH | `/api/v1/users/{id}` | `AdminUsersController_update` | NO | **UNCOVERED** | N/A | Update a user account (ADMIN) |
+| GET | `/healthz` | `HealthController_getLiveness` | YES | **PASS** | 200 | GET /healthz liveness probe |
+| GET | `/metrics` | `MetricsController_getMetrics` | YES | **PASS** | 401 | GET /metrics without token returns 401 |
+| GET | `/readyz` | `HealthController_getReadiness` | YES | **PASS** | 200 | GET /readyz readiness probe |

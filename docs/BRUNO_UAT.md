@@ -38,7 +38,7 @@ METRICS_TOKEN=uat-metrics-token
 RATE_LIMIT_MAX_REQUESTS=2000              # raised: the collection fires ~245
 AUTH_IP_LIMIT_MAX=300                     # requests in ~45 s from one IP
 ADMIN_EMAIL=uat-admin@example.com         # bootstrap admin (now seeded verified)
-ADMIN_PASSWORD="UatAdmin2026x"            # quote it: '#' starts a dotenv comment
+ADMIN_PASSWORD="YOUR_LOCAL_UAT_ADMIN_PASSWORD" # placeholder: set in local .env, never commit
 SEED_DEMO_DATA=true
 ```
 

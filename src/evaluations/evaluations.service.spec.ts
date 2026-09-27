@@ -13,8 +13,18 @@ const instructorCaller: AuthenticatedUser = {
   jti: 'j',
 };
 
+const adminCaller: AuthenticatedUser = {
+  id: 'admin-1',
+  role: 'ADMIN',
+  sessionId: 's',
+  jti: 'j',
+};
+
 function makePrismaMock() {
   return {
+    class: {
+      findFirst: jest.fn(),
+    },
     studentEvaluation: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -127,5 +137,63 @@ describe('EvaluationsService', () => {
     await expect(service.delete(instructorCaller, 'nope')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  describe('class-scoped authorization (finding N3)', () => {
+    it('rejects evaluation when instructor does not teach the class (404)', async () => {
+      prisma.class.findFirst.mockResolvedValue({ id: 'cls-1', instructorId: 'other-instructor' });
+      await expect(
+        service.create(instructorCaller, {
+          studentId: 'sp1',
+          classId: 'cls-1',
+          rating: 8,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.studentEvaluation.create).not.toHaveBeenCalled();
+    });
+
+    it('allows evaluation when instructor teaches the class', async () => {
+      prisma.class.findFirst.mockResolvedValue({ id: 'cls-1', instructorId: 'instructor-1' });
+      prisma.studentEvaluation.create.mockResolvedValue({ ...evaluation, classId: 'cls-1' });
+      const result = await service.create(instructorCaller, {
+        studentId: 'sp1',
+        classId: 'cls-1',
+        rating: 8,
+      });
+      expect(result).toMatchObject({ classId: 'cls-1', rating: 8 });
+      expect(prisma.studentEvaluation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ classId: 'cls-1', authorUserId: 'instructor-1' }),
+        }),
+      );
+    });
+
+    it('allows evaluation for any valid class when caller is admin', async () => {
+      prisma.class.findFirst.mockResolvedValue({ id: 'cls-1', instructorId: 'other-instructor' });
+      prisma.studentEvaluation.create.mockResolvedValue({
+        ...evaluation,
+        authorUserId: 'admin-1',
+        classId: 'cls-1',
+        rating: 9,
+      });
+      const result = await service.create(adminCaller, {
+        studentId: 'sp1',
+        classId: 'cls-1',
+        rating: 9,
+      });
+      expect(result).toMatchObject({ classId: 'cls-1', rating: 9, authorUserId: 'admin-1' });
+    });
+
+    it('rejects evaluation when class does not exist (404)', async () => {
+      prisma.class.findFirst.mockResolvedValue(null);
+      await expect(
+        service.create(instructorCaller, {
+          studentId: 'sp1',
+          classId: 'cls-missing',
+          rating: 7,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.studentEvaluation.create).not.toHaveBeenCalled();
+    });
   });
 });

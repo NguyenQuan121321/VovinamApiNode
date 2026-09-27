@@ -33,6 +33,30 @@ Current status: **P0–P5 ALL MERGED (PRs through #26). TASK-06 FINAL QA (2026-0
 
 ## Handoff log
 
+### 2026-09-28 — Session 29: Repair Confirmed Live-UAT / Security / Business-Logic Findings
+- **Objective:** Repair all confirmed findings from `docs/LIVE_UAT_FORENSIC_VERIFICATION.md` (F1/F2, F3, F4, F6, F7, F8, F9, F10, N1, N2, N3) across backend logic, live UAT harness, reporting, and documentation.
+- **Backend Business Logic (N3):** In `src/evaluations/evaluations.service.ts`, scoped `classId` validation to enforce that an `INSTRUCTOR` caller can only attach evaluations to classes they teach (`target class.instructorId === caller.id`), returning uniform 404 for foreign or non-existent classes. ADMIN retains unrestricted class reference. Unit tests added to `evaluations.service.spec.ts` (11/11 passed); E2E regression assertions added to `test/e2e/matrix-workflows.e2e-spec.ts`.
+- **Credential Hygiene (F1/F2):** Removed hardcoded password literals from `docs/BRUNO_UAT.md` and `test/uat/live-render-runner.mjs`. Repository search confirms 0 occurrences of exposed credentials in the current tree. Runtime credentials sourced strictly from `LIVE_UAT_ADMIN_EMAIL`, `LIVE_UAT_ADMIN_PASSWORD`, and `LIVE_UAT_ADMIN_TOTP_SECRET` with fail-fast enforcement. Historical Git history rotation/removal noted for human owner.
+- **Live UAT Resource Isolation & Actor Graph (F3):** Rebuilt `test/uat/live-runner-base.mjs` and `live-render-runner.mjs` to operate strictly on an ephemeral synthetic actor graph created per run (Instructor A, Instructor B, Student A, Student B, Parent, Child, Class A, Class B) with unique `RUN_ID` prefixes. All fixed demo IDs removed; mutations against pre-existing entities eliminated.
+- **Global Settings & Financial Safety (F4/F5):** Withheld mutating global settings endpoints (`PUT tuition-rates` and `bank-account`) on live Render, classifying them transparently as `NOT_SAFE_TO_AUTOMATE`. Invoices and payments exercised strictly on newly-created synthetic students; historical financial records preserved per application foreign-key policy.
+- **OpenAPI Coverage & Assertion Integrity (F6/F7/F8/F9/F10):**
+  - Coverage mechanism redesigned: operations marked `COVERED` only when an actual HTTP request executed AND the assertion passed. Fallback assignments removed.
+  - `/docs` and `/docs-json` assertions enforce strict HTTP 200 comparison with fail-closed behavior.
+  - Rate-limit probe handles safe non-flooding sample without claiming unproven protection (evaluated as `MANUAL_REQUIRED` unless 429 observed; fail-closed on 500/503).
+  - Guaranteed cleanup implemented via `try/finally` and process signal handlers (`SIGINT`/`SIGTERM`), deleting only IDs in `createdResources`. Results JSON guaranteed written on abort.
+  - Reports (`generate-uat-md.mjs`, `generate-coverage-md.mjs`) rewritten to dynamically interpolate actual execution evidence without static claims. Response-body leak scan active.
+- **Environment & Swagger Posture (N1/N2):** Documented live Render deployment as thesis staging/integration environment with simulated payment gateway and intentional Swagger enablement.
+- **Verification Evidence:**
+  - `npm run format:check` ✓ (all files match Prettier)
+  - `npm run lint` ✓ (0 problems, 0 warnings)
+  - `npm run typecheck` ✓ (tsc clean)
+  - `npm run build` ✓ (nest build clean)
+  - `npm test -- --coverage` ✓ (429/429 unit passed, 83 suites, global and module coverage floors met)
+  - `npm run test:uat` ✓ (9/9 runner safety & integrity tests passed)
+  - `npm run openapi:generate` ✓ (88 paths written)
+  - `npm run contract:lint` ✓ (spectral 0 errors)
+  - `npm audit --audit-level=high` ✓ (0 high/critical vulnerabilities)
+
 ### 2026-09-26 — Session 28: Live Render UAT — Full System Verification (Phases 0–26)
 - **Objective:** Perform complete automated black-box verification against the live deployed backend on Render (`https://vovinamapinode.onrender.com/`) over real HTTPS without modifying production code, database schema, or production environment variables.
 - **Execution & Scope:** Automated runner `test/uat/live-render-runner.mjs` executed 167 real HTTP assertions across Phases 0–22, covering all 88 OpenAPI paths and 111 operations with rate-limit pacing (180ms between requests, token bucket pacing on `/auth`).

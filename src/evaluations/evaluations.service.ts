@@ -72,11 +72,15 @@ export class EvaluationsService {
     if (dto.classId !== undefined) {
       // Validate before insert: an unknown class id would otherwise surface as
       // a raw FK violation (500) instead of the uniform 404 posture.
+      // Instructors may only attach evaluations to classes they teach (finding N3).
       const cls = await this.prisma.class.findFirst({
         where: { id: dto.classId },
-        select: { id: true },
+        select: { id: true, instructorId: true },
       });
       if (cls === null) {
+        throw new NotFoundException('Not found');
+      }
+      if (caller.role === 'INSTRUCTOR' && cls.instructorId !== caller.id) {
         throw new NotFoundException('Not found');
       }
     }

@@ -9,1723 +9,2217 @@ import {
   recordTest,
   testResults,
   operationCoverage,
-  openapiDoc
+  openapiDoc,
+  createdResources,
+  registerCreatedResource,
+  isCreatedResource,
+  leakScanResults,
+  evaluateDocsAssertion,
+  evaluateRateLimitAssertion,
+  calculateCoverageSummary,
+  redactSecrets,
 } from './live-runner-base.mjs';
 
-async function getUatAdminToken() {
-  const loginRes = await request('POST', '/api/v1/auth/login', {
-    body: { email: 'uat-admin@example.com', password: 'UatAdmin2026x' }
-  });
-  if (loginRes.json?.data?.mfaRequired === false) {
-    return loginRes.json.data.tokens.accessToken;
+// =====================================================================
+// PHASE 1 — RUNTIME CREDENTIALS & PRECONDITIONS (F1/F2)
+// =====================================================================
+const adminEmail = process.env.LIVE_UAT_ADMIN_EMAIL || 'uat-admin@example.com';
+const adminPassword = process.env.LIVE_UAT_ADMIN_PASSWORD;
+let totpSecret = process.env.LIVE_UAT_ADMIN_TOTP_SECRET;
+
+if (!totpSecret && fs.existsSync('test/uat/uat-admin-totp-secret.txt')) {
+  try {
+    totpSecret = fs.readFileSync('test/uat/uat-admin-totp-secret.txt', 'utf8').trim();
+  } catch {
+    // ignore read error
   }
-  const secret = fs.readFileSync('test/uat/uat-admin-totp-secret.txt', 'utf8').trim();
-  const code = otplib.authenticator.generate(secret);
-  const mfaRes = await request('POST', '/api/v1/auth/mfa/login-verify', {
-    body: { mfaToken: loginRes.json?.data?.mfaToken, code }
-  });
-  return mfaRes.json?.data?.tokens?.accessToken;
 }
 
-async function run() {
+let runStatus = 'INITIALIZING';
+let cleanupStatus = 'NOT_RUN';
+const syntheticFinancialResidue = {
+  invoices: [],
+  payments: [],
+};
+
+async function getBootstrapAdminToken() {
+  if (!adminPassword) {
+    console.error('\n[SAFETY GATE BLOCKED] Missing required environment variable: LIVE_UAT_ADMIN_PASSWORD');
+    console.error('The live Render UAT admin credential must come only from runtime environment variables.');
+    console.error('The human owner must rotate/revoke the credential on Render before running live UAT.');
+    recordTest(
+      1,
+      'Safety Gate: Runtime credentials present',
+      'LIVE_UAT_ADMIN_PASSWORD set in environment',
+      'MISSING',
+      'BLOCKED',
+      'LIVE_UAT_ADMIN_PASSWORD required. Live run blocked per Phase 1/15 safety contract.',
+      null,
+      false,
+    );
+    throw new Error('BLOCKED: LIVE_UAT_ADMIN_PASSWORD is missing');
+  }
+
+  const loginRes = await request('POST', '/api/v1/auth/login', {
+    body: { email: adminEmail, password: adminPassword },
+  });
+
+  if (!loginRes.ok && loginRes.status !== 200) {
+    recordTest(
+      1,
+      'Admin bootstrap authentication',
+      200,
+      loginRes.status,
+      'FAIL',
+      `Login failed for bootstrap operator (${adminEmail}): HTTP ${loginRes.status}`,
+    );
+    throw new Error(`Bootstrap admin login failed with status ${loginRes.status}`);
+  }
+
+  if (loginRes.json?.data?.mfaRequired === false) {
+    recordTest(1, 'Admin bootstrap authentication', 200, loginRes.status, 'PASS', 'Admin token acquired');
+    return loginRes.json.data.tokens.accessToken;
+  }
+
+  if (!totpSecret) {
+    console.error('\n[SAFETY GATE BLOCKED] MFA is required for admin but LIVE_UAT_ADMIN_TOTP_SECRET is missing');
+    recordTest(
+      1,
+      'Admin MFA verification',
+      'TOTP code generated',
+      'MISSING_SECRET',
+      'BLOCKED',
+      'MFA required by live server but TOTP secret is not provided',
+      'AuthController_mfaLoginVerify',
+      false,
+    );
+    throw new Error('BLOCKED: LIVE_UAT_ADMIN_TOTP_SECRET is missing');
+  }
+
+  const code = otplib.authenticator.generate(totpSecret);
+  const mfaRes = await request('POST', '/api/v1/auth/mfa/login-verify', {
+    body: { mfaToken: loginRes.json?.data?.mfaToken, code },
+  });
+
+  const mfaOk = mfaRes.status === 200 && !!mfaRes.json?.data?.tokens?.accessToken;
+  recordTest(
+    1,
+    'Admin MFA login verify',
+    200,
+    mfaRes.status,
+    mfaOk ? 'PASS' : 'FAIL',
+    mfaOk ? 'MFA satisfied for admin bootstrap' : 'MFA verification failed',
+    'AuthController_mfaLoginVerify',
+    true,
+  );
+
+  if (!mfaOk) {
+    throw new Error(`Admin MFA verification failed with HTTP ${mfaRes.status}`);
+  }
+
+  return mfaRes.json.data.tokens.accessToken;
+}
+
+// Tokens & IDs for synthetic graph
+let adminToken = '';
+let adminUserId = '';
+
+let instructorAToken = '';
+let instructorAUserId = '';
+let instructorBToken = '';
+let instructorBUserId = '';
+
+let studentAToken = '';
+let studentAUserId = '';
+let studentAProfileId = '';
+
+let studentBToken = '';
+let studentBUserId = '';
+let studentBProfileId = '';
+
+let parentToken = '';
+let parentUserId = '';
+let childStudentProfileId = '';
+
+let classAId = '';
+let classBId = '';
+let scheduleAId = '';
+let enrollmentAId = '';
+let attendanceSessionAId = '';
+
+let testBeltRankId = 0;
+let examAId = '';
+let examRegistrationAId = '';
+
+let manualInvoiceId = '';
+let manualDiscountId = '';
+let leaveRequestId = '';
+let promotionProposalId = '';
+let evaluationId = '';
+let announcementId = '';
+
+// Synthetic password used for all ephemeral actors in this specific run
+const ACTOR_PASSWORD = `Uat#${RUN_ID.slice(0, 8)}!2026`;
+
+// =====================================================================
+// PHASE 6 — GUARANTEED CLEANUP (F10)
+// =====================================================================
+let cleanupExecuted = false;
+
+async function performGuaranteedCleanup(reason = 'NORMAL') {
+  if (cleanupExecuted) return;
+  cleanupExecuted = true;
+  console.log(`\n=======================================================`);
+  console.log(`[CLEANUP] Executing guaranteed cleanup (Reason: ${reason})...`);
   console.log(`=======================================================`);
-  console.log(`VOVINAM API NODE — LIVE RENDER UAT FULL VERIFICATION`);
-  console.log(`TARGET: ${BASE_URL}`);
-  console.log(`TIMESTAMP: ${new Date().toISOString()}`);
-  console.log(`=======================================================\n`);
 
-  // Tokens & Context
-  let adminToken = await getUatAdminToken();
-  let adminUserId = '5abedcea-2340-49bc-b0a1-98c53488ad87';
-  console.log(`[BOOT] Obtained valid admin token with MFA satisfied`);
-
-  let instructorToken = '';
-  let instructorUserId = '';
-  let studentToken = '';
-  let studentUserId = '';
-  let studentProfileId = '7f4287ae-0529-448e-80d9-02e281a4b1c9';
-  let parentToken = '';
-  let parentUserId = '';
-
-  // Synthetic entity IDs
-  let syntheticStudentId = '';
-  let syntheticClassId = '';
-  let syntheticScheduleId = '';
-  let syntheticEnrollmentId = '';
-  let syntheticSessionId = '';
-  let syntheticExamId = '';
-  let syntheticRegistrationId = '';
-  let syntheticInvoiceId = '';
-  let syntheticDiscountId = '';
-  let syntheticLeaveId = '';
-  let syntheticProposalId = '';
-  let syntheticEvalId = '';
-  let syntheticUserId = '';
-
-  // =================================================================
-  // PHASE 0 — LIVE PRE-FLIGHT
-  // =================================================================
-  console.log(`\n--- PHASE 0: LIVE PRE-FLIGHT ---`);
-
-  // 1. GET /healthz
-  const healthz = await request('GET', '/healthz');
-  const healthzOk = healthz.status === 200 && healthz.json?.data?.status === 'ok';
-  recordTest(0, 'GET /healthz liveness', 200, healthz.status, healthzOk ? 'PASS' : 'FAIL',
-    `Latency: ${healthz.latency}ms`, 'HealthController_getLiveness');
-
-  // 2. GET /readyz
-  const readyz = await request('GET', '/readyz');
-  const readyzOk = readyz.status === 200 && readyz.json?.data?.status === 'ok' && readyz.json?.data?.database === 'up';
-  recordTest(0, 'GET /readyz readiness', 200, readyz.status, readyzOk ? 'PASS' : 'FAIL',
-    `Latency: ${readyz.latency}ms, DB: ${readyz.json?.data?.database}`, 'HealthController_getReadiness');
-
-  if (!readyzOk) {
-    console.error('FATAL: readyz failed. STOPPING business UAT per Phase 0 contract.');
+  let errors = 0;
+  if (!adminToken) {
+    console.log('[CLEANUP] No admin token available; skipping remote API cleanup.');
+    const anyCreated = Object.values(createdResources).some((s) => s.size > 0);
+    cleanupStatus = anyCreated ? 'CLEANUP PARTIAL' : 'CLEANUP COMPLETED';
+    console.log(`[CLEANUP] Status: ${cleanupStatus}`);
+    writeResultsJson();
     return;
   }
 
-  // 3. GET /metrics without token
-  const metricsNoToken = await request('GET', '/metrics');
-  const metricsProtected = metricsNoToken.status === 401;
-  recordTest(0, 'GET /metrics without token returns 401', 401, metricsNoToken.status,
-    metricsProtected ? 'PASS' : 'FAIL', 'Protected metrics endpoint', 'MetricsController_getMetrics');
-
-  // 4. GET /docs and /docs-json
-  const docs = await request('GET', '/docs');
-  const docsJson = await request('GET', '/docs-json');
-  recordTest(0, 'GET /docs live documentation endpoint', '200 (Enabled for QA)', docs.status, 'PASS',
-    `Swagger UI served with CSP and noindex`);
-  recordTest(0, 'GET /docs-json live OpenAPI document', 200, docsJson.status,
-    docsJson.status === 200 ? 'PASS' : 'FAIL',
-    `Paths: ${Object.keys(docsJson.json?.paths || {}).length}`);
-
-  // 5. Security Headers on /healthz
-  const csp = healthz.headers.get('content-security-policy');
-  const hsts = healthz.headers.get('strict-transport-security');
-  const robots = healthz.headers.get('x-robots-tag');
-  const nosniff = healthz.headers.get('x-content-type-options');
-  const frame = healthz.headers.get('x-frame-options');
-  const hasSecurityHeaders = hsts && robots && nosniff && frame;
-  recordTest(0, 'Production security headers check', 'HSTS, X-Robots, Nosniff, Frame present',
-    hasSecurityHeaders ? 'Present' : 'Missing', hasSecurityHeaders ? 'PASS' : 'FAIL',
-    `HSTS=${!!hsts}, Robots=${robots}, Nosniff=${nosniff}, CSP=${!!csp}`);
-
-  // 6. Error envelope & stack trace test
-  const notFound = await request('GET', '/api/v1/non-existent-probe-endpoint');
-  const cleanError = notFound.status === 404 && notFound.json?.code === 404 && !notFound.text.includes('stack') && !notFound.text.includes('node_modules');
-  recordTest(0, 'Error envelope & no stack leak', 404, notFound.status,
-    cleanError ? 'PASS' : 'FAIL', 'Standard uniform error envelope');
-
-  // =================================================================
-  // PHASE 1 — PREPARE LIVE UAT ENVIRONMENT
-  // =================================================================
-  console.log(`\n--- PHASE 1: PREPARE LIVE UAT ENVIRONMENT ---`);
-  const bruTemplateExists = fs.existsSync('bruno/environments/Render-UAT.example.bru');
-  const bruContent = bruTemplateExists ? fs.readFileSync('bruno/environments/Render-UAT.example.bru', 'utf8') : '';
-  const noSecretsInTemplate = !bruContent.includes('Demo#2026') && bruContent.includes('YOUR_ADMIN_PASSWORD');
-  recordTest(1, 'Render-UAT.example.bru template exists without secrets', true,
-    bruTemplateExists && noSecretsInTemplate, (bruTemplateExists && noSecretsInTemplate) ? 'PASS' : 'FAIL',
-    'Non-secret template verified');
-
-  // =================================================================
-  // PHASE 2 — LIVE DATA SAFETY
-  // =================================================================
-  console.log(`\n--- PHASE 2: LIVE DATA SAFETY ---`);
-  recordTest(2, 'Synthetic prefix isolation enforcement', 'live-uat-*', RUN_ID, 'PASS',
-    'All mutating operations will strictly target synthetic entities');
-
-  // =================================================================
-  // PHASE 3 — AUTHENTICATION LIFECYCLE
-  // =================================================================
-  console.log(`\n--- PHASE 3: AUTHENTICATION LIFECYCLE ---`);
-
-  // 1. Register test user
-  const syntheticRegEmail = `live-uat-reg-${Date.now()}@example.com`;
-  const regRes = await request('POST', '/api/v1/auth/register', {
-    body: {
-      email: syntheticRegEmail,
-      password: 'UatPassword#2026',
-      role: 'STUDENT',
-      fullName: 'Live UAT Registrant',
-      dateOfBirth: '2005-05-15'
+  // 1. Delete synthetic announcements
+  for (const annId of Array.from(createdResources.announcements)) {
+    try {
+      const res = await request('DELETE', `/api/v1/announcements/${annId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.announcements.delete(annId);
+    } catch {
+      errors++;
     }
-  });
-  recordTest(3, '1. Register new student account', 201, regRes.status,
-    (regRes.status === 201 && regRes.json?.data?.requiresVerification === true) ? 'PASS' : 'FAIL',
-    'Requires verification returned', 'AuthController_register');
+  }
 
-  // 2. Duplicate registration
-  const dupReg = await request('POST', '/api/v1/auth/register', {
-    body: {
-      email: syntheticRegEmail,
-      password: 'UatPassword#2026',
-      role: 'STUDENT',
-      fullName: 'Live UAT Registrant',
-      dateOfBirth: '2005-05-15'
+  // 2. Delete synthetic evaluations
+  for (const evalId of Array.from(createdResources.evaluations)) {
+    try {
+      const res = await request('DELETE', `/api/v1/evaluations/${evalId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.evaluations.delete(evalId);
+    } catch {
+      errors++;
     }
-  });
-  recordTest(3, '2. Duplicate registration anti-enumeration', 201, dupReg.status,
-    (dupReg.status === 201 && dupReg.json?.data?.requiresVerification === true) ? 'PASS' : 'FAIL',
-    'Identical response returned');
+  }
 
-  // 3. Login unverified user
-  const unverifiedLogin = await request('POST', '/api/v1/auth/login', {
-    body: { email: syntheticRegEmail, password: 'UatPassword#2026' }
-  });
-  recordTest(3, '3. Login before email verification rejected', 401, unverifiedLogin.status,
-    unverifiedLogin.status === 401 ? 'PASS' : 'FAIL', 'Uniform invalid credentials message');
-
-  // Resend verification
-  const resendVer = await request('POST', '/api/v1/auth/resend-verification', {
-    body: { email: syntheticRegEmail }
-  });
-  recordTest(3, 'Resend email verification', 200, resendVer.status,
-    resendVer.status === 200 ? 'PASS' : 'FAIL', 'Anti-enumeration 200 returned', 'AuthController_resendVerification');
-
-  // Email verification token test (invalid token test -> 400)
-  const verifyToken = await request('POST', '/api/v1/auth/verify-email', {
-    body: { token: 'invalid-verification-token-vector' }
-  });
-  recordTest(3, '14. Email verification with invalid token', 400, verifyToken.status,
-    verifyToken.status === 400 ? 'PASS' : 'FAIL',
-    'Invalid token rejected (Real inbox consumption is MANUAL_REQUIRED)', 'AuthController_verifyEmail');
-
-  // Forgot password
-  const forgotPwd = await request('POST', '/api/v1/auth/forgot-password', {
-    body: { email: syntheticRegEmail }
-  });
-  recordTest(3, '12. Password reset request anti-enumeration', 200, forgotPwd.status,
-    forgotPwd.status === 200 && forgotPwd.json?.data?.sent === true ? 'PASS' : 'FAIL',
-    '{sent: true} returned', 'AuthController_forgotPassword');
-
-  // Reset password invalid token
-  const resetPwd = await request('POST', '/api/v1/auth/reset-password', {
-    body: { token: 'invalid-reset-token-garbage', password: 'NewPassword#2026' }
-  });
-  recordTest(3, 'Reset password invalid token rejection', 400, resetPwd.status,
-    resetPwd.status === 400 ? 'PASS' : 'FAIL', 'Rejected bad reset token', 'AuthController_resetPassword');
-
-  // Role Logins
-  // Instructor Login
-  const instrLogin = await request('POST', '/api/v1/auth/login', {
-    body: { email: 'demo-instructor@example.com', password: 'Demo#2026' }
-  });
-  instructorToken = instrLogin.json?.data?.tokens?.accessToken;
-  instructorUserId = instrLogin.json?.data?.user?.id;
-  recordTest(3, 'Instructor login', 200, instrLogin.status,
-    instrLogin.status === 200 && instrLogin.json?.data?.user?.role === 'INSTRUCTOR' ? 'PASS' : 'FAIL',
-    'Instructor session created');
-
-  // Student Login
-  const studentLogin = await request('POST', '/api/v1/auth/login', {
-    body: { email: 'demo-student@example.com', password: 'Demo#2026' }
-  });
-  studentToken = studentLogin.json?.data?.tokens?.accessToken;
-  studentUserId = studentLogin.json?.data?.user?.id;
-  const studentRefresh = studentLogin.json?.data?.tokens?.refreshToken;
-  recordTest(3, 'Student login', 200, studentLogin.status,
-    studentLogin.status === 200 && studentLogin.json?.data?.user?.role === 'STUDENT' ? 'PASS' : 'FAIL',
-    'Student session created', 'AuthController_login');
-
-  // Parent Login
-  const parentLogin = await request('POST', '/api/v1/auth/login', {
-    body: { email: 'demo-parent@example.com', password: 'Demo#2026' }
-  });
-  parentToken = parentLogin.json?.data?.tokens?.accessToken;
-  parentUserId = parentLogin.json?.data?.user?.id;
-  recordTest(3, 'Parent login', 200, parentLogin.status,
-    parentLogin.status === 200 && parentLogin.json?.data?.user?.role === 'PARENT' ? 'PASS' : 'FAIL',
-    'Parent session created');
-
-  // 4. Authenticated /me
-  const meRes = await request('GET', '/api/v1/auth/me', { token: studentToken });
-  recordTest(3, '4. Authenticated GET /auth/me', 200, meRes.status,
-    meRes.status === 200 && meRes.json?.data?.email === 'demo-student@example.com' ? 'PASS' : 'FAIL',
-    `Role: ${meRes.json?.data?.role}`, 'AuthController_me');
-
-  // 5. Session listing
-  const sessionsRes = await request('GET', '/api/v1/auth/sessions', { token: studentToken });
-  recordTest(3, '5. Session listing GET /auth/sessions', 200, sessionsRes.status,
-    sessionsRes.status === 200 && Array.isArray(sessionsRes.json?.data) ? 'PASS' : 'FAIL',
-    `Active sessions: ${sessionsRes.json?.data?.length}`, 'AuthController_sessions');
-
-  // 6. Refresh token
-  const refreshRes = await request('POST', '/api/v1/auth/refresh-token', {
-    body: { refreshToken: studentRefresh }
-  });
-  const newStudentAccess = refreshRes.json?.data?.accessToken;
-  recordTest(3, '6. Refresh token rotation POST /auth/refresh-token', 200, refreshRes.status,
-    refreshRes.status === 200 && !!newStudentAccess ? 'PASS' : 'FAIL',
-    'Rotated refresh token returned', 'AuthController_refreshToken');
-
-  // 7. Old refresh token replay (reuse detection)
-  const replayRes = await request('POST', '/api/v1/auth/refresh-token', {
-    body: { refreshToken: studentRefresh } // reused old token
-  });
-  recordTest(3, '7. Old refresh token replay rejection', 401, replayRes.status,
-    replayRes.status === 401 ? 'PASS' : 'FAIL', 'Reuse detection triggered 401');
-
-  // Re-login student after replay revoked the family
-  const studentLogin2 = await request('POST', '/api/v1/auth/login', {
-    body: { email: 'demo-student@example.com', password: 'Demo#2026' }
-  });
-  studentToken = studentLogin2.json?.data?.tokens?.accessToken;
-  const studentSessionId = studentLogin2.json?.data?.tokens?.sessionId;
-
-  // Single session revocation DELETE /auth/sessions/:id
-  const deleteSession = await request('DELETE', `/api/v1/auth/sessions/${studentSessionId}`, { token: studentToken });
-  recordTest(3, 'Revoke single session DELETE /auth/sessions/:id', 200, deleteSession.status,
-    deleteSession.status === 200 ? 'PASS' : 'FAIL', 'Session revoked', 'AuthController_revokeSession');
-
-  // Re-login student for subsequent tests
-  const studentLogin3 = await request('POST', '/api/v1/auth/login', {
-    body: { email: 'demo-student@example.com', password: 'Demo#2026' }
-  });
-  studentToken = studentLogin3.json?.data?.tokens?.accessToken;
-
-  // Change password request with wrong old password -> 401 Unauthorized
-  const chgPwdWrong = await request('POST', '/api/v1/auth/change-password', {
-    token: studentToken,
-    body: { currentPassword: 'WrongOldPassword#2026', newPassword: 'NewDemo#2026' }
-  });
-  recordTest(3, '11. Change password wrong current password rejected (401)', 401, chgPwdWrong.status,
-    chgPwdWrong.status === 401 ? 'PASS' : 'FAIL', 'Current password check verified 401', 'AuthController_changePassword');
-
-  // Email change request (POST /auth/change-email/request returns 201)
-  const chgEmailReq = await request('POST', '/api/v1/auth/change-email/request', {
-    token: studentToken,
-    body: { newEmail: `new-${Date.now()}@example.com`, currentPassword: 'Demo#2026' }
-  });
-  recordTest(3, '13. Change email request', 201, chgEmailReq.status,
-    chgEmailReq.status === 201 ? 'PASS' : 'FAIL', 'Change email requested (201)', 'AuthController_requestChangeEmail');
-
-  // Change email confirm with invalid token
-  const chgEmailConfirm = await request('POST', '/api/v1/auth/change-email/confirm', {
-    body: { token: 'invalid-change-email-token' }
-  });
-  recordTest(3, 'Change email confirm invalid token', 400, chgEmailConfirm.status,
-    chgEmailConfirm.status === 400 ? 'PASS' : 'FAIL', 'Invalid token rejected', 'AuthController_confirmChangeEmail');
-
-  // Audit log for me
-  const myAudit = await request('GET', '/api/v1/auth/me/audit-log', { token: studentToken });
-  recordTest(3, 'GET /auth/me/audit-log', 200, myAudit.status,
-    myAudit.status === 200 && Array.isArray(myAudit.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Audit entries: ${myAudit.json?.data?.items?.length}`, 'AuthController_auditLog');
-
-  // MFA endpoints verification using a dedicated synthetic user
-  console.log(`  [MFA TEST] Creating synthetic user for MFA lifecycle...`);
-  const mfaUserEmail = `live-uat-mfa-${Date.now()}@example.com`;
-  const mfaUserCreated = await request('POST', '/api/v1/users', {
-    token: adminToken,
-    body: { email: mfaUserEmail, password: 'MfaUser#2026', role: 'STUDENT', fullName: 'MFA Test User' }
-  });
-  const mfaLogin1 = await request('POST', '/api/v1/auth/login', {
-    body: { email: mfaUserEmail, password: 'MfaUser#2026' }
-  });
-  const mfaUserToken = mfaLogin1.json?.data?.tokens?.accessToken;
-
-  // 15. MFA Enable TOTP Probe 1: test invalid code rejection
-  const totpEnable1 = await request('POST', '/api/v1/auth/mfa/totp/enable', { token: mfaUserToken });
-  recordTest(3, '15. MFA Enable TOTP POST /auth/mfa/totp/enable', 201, totpEnable1.status,
-    totpEnable1.status === 201 ? 'PASS' : 'FAIL', 'Secret generated', 'AuthController_totpEnable');
-
-  const verifyBadCode = await request('POST', '/api/v1/auth/mfa/totp/verify', {
-    token: mfaUserToken,
-    body: { code: '000000' }
-  });
-  recordTest(3, '17. Verify invalid TOTP code rejected (401)', 401, verifyBadCode.status,
-    verifyBadCode.status === 401 ? 'PASS' : 'FAIL', 'Bad code rejected 401');
-
-  // Enable TOTP Probe 2: test valid code confirmation
-  const totpEnable2 = await request('POST', '/api/v1/auth/mfa/totp/enable', { token: mfaUserToken });
-  const otpauthUrl2 = totpEnable2.json?.data?.otpauthUrl || '';
-  const totpSecret2 = (otpauthUrl2.match(/secret=([A-Z2-7]+)/) || [])[1];
-
-  const validTotpCode = otplib.authenticator.generate(totpSecret2);
-  const verifyGoodCode = await request('POST', '/api/v1/auth/mfa/totp/verify', {
-    token: mfaUserToken,
-    body: { code: validTotpCode }
-  });
-  const recoveryCodes = verifyGoodCode.json?.data?.recoveryCodes || [];
-  recordTest(3, 'Verify valid TOTP code POST /auth/mfa/totp/verify', 201, verifyGoodCode.status,
-    verifyGoodCode.status === 201 && recoveryCodes.length === 10 ? 'PASS' : 'FAIL',
-    `10 recovery codes generated`, 'AuthController_totpVerify');
-
-  // MFA methods & recovery codes remaining
-  const mfaMethods = await request('GET', '/api/v1/auth/mfa/methods', { token: mfaUserToken });
-  recordTest(3, 'GET /auth/mfa/methods', 200, mfaMethods.status,
-    mfaMethods.status === 200 && mfaMethods.json?.data?.some(m => m.type === 'totp' && m.enabled === true) ? 'PASS' : 'FAIL',
-    'TOTP enabled=true', 'AuthController_mfaMethods');
-
-  const recCodesRem = await request('GET', '/api/v1/auth/mfa/totp/recovery-codes', { token: mfaUserToken });
-  recordTest(3, '18. GET /auth/mfa/totp/recovery-codes', 200, recCodesRem.status,
-    recCodesRem.status === 200 && recCodesRem.json?.data?.remaining === 10 ? 'PASS' : 'FAIL',
-    'Remaining: 10', 'AuthController_recoveryCodes');
-
-  // MFA Validate (use +30s step so code is valid in ±1 window but distinct from verify code to avoid replay guard)
-  const validateCode = otplib.authenticator.create({ ...otplib.authenticator.options, epoch: Date.now() + 30000 }).generate(totpSecret2);
-  const totpVal = await request('POST', '/api/v1/auth/mfa/totp/validate', {
-    token: mfaUserToken,
-    body: { code: validateCode }
-  });
-  recordTest(3, 'POST /auth/mfa/totp/validate', 200, totpVal.status,
-    totpVal.status === 200 ? 'PASS' : 'FAIL', 'TOTP validated', 'AuthController_totpValidate');
-
-  // 16. MFA Login: login -> mfaToken -> login-verify
-  const mfaLogin2 = await request('POST', '/api/v1/auth/login', {
-    body: { email: mfaUserEmail, password: 'MfaUser#2026' }
-  });
-  const mfaChallengeToken = mfaLogin2.json?.data?.mfaToken;
-  const loginVerifyRes = await request('POST', '/api/v1/auth/mfa/login-verify', {
-    body: { mfaToken: mfaChallengeToken, code: recoveryCodes[0] }
-  });
-  recordTest(3, '16. MFA Login with recovery code POST /auth/mfa/login-verify', 200, loginVerifyRes.status,
-    loginVerifyRes.status === 200 && !!loginVerifyRes.json?.data?.tokens?.accessToken ? 'PASS' : 'FAIL',
-    'Authenticated via recovery code', 'AuthController_mfaLoginVerify');
-
-  // TOTP Disable (use -30s step code, not a recovery code, with account password)
-  const mfaUserToken2 = loginVerifyRes.json?.data?.tokens?.accessToken;
-  const disableCode = otplib.authenticator.create({ ...otplib.authenticator.options, epoch: Date.now() - 30000 }).generate(totpSecret2);
-  const totpDisableRes = await request('POST', '/api/v1/auth/mfa/totp/disable', {
-    token: mfaUserToken2,
-    body: { password: 'MfaUser#2026', code: disableCode }
-  });
-  recordTest(3, 'POST /auth/mfa/totp/disable', 201, totpDisableRes.status,
-    totpDisableRes.status === 201 && totpDisableRes.json?.data?.disabled === true ? 'PASS' : 'FAIL',
-    'TOTP disabled', 'AuthController_totpDisable');
-
-  // Re-login after disable revokes sessions
-  const mfaLogin3 = await request('POST', '/api/v1/auth/login', {
-    body: { email: mfaUserEmail, password: 'MfaUser#2026' }
-  });
-  const mfaUserToken3 = mfaLogin3.json?.data?.tokens?.accessToken;
-
-  // Deactivate synthetic user (SensitiveOperationDto uses password)
-  const deactRes = await request('POST', '/api/v1/auth/deactivate', {
-    token: mfaUserToken3,
-    body: { password: 'MfaUser#2026' }
-  });
-  recordTest(3, 'Deactivate account POST /auth/deactivate', 200, deactRes.status,
-    deactRes.status === 200 ? 'PASS' : 'FAIL', 'Account deactivated', 'AuthController_deactivate');
-
-  // DELETE /auth/me with another synthetic user
-  const delMeUserEmail = `live-uat-delme-${Date.now()}@example.com`;
-  await request('POST', '/api/v1/users', {
-    token: adminToken,
-    body: { email: delMeUserEmail, password: 'DelMeUser#2026', role: 'STUDENT', fullName: 'Delete Me User' }
-  });
-  const delMeLogin = await request('POST', '/api/v1/auth/login', {
-    body: { email: delMeUserEmail, password: 'DelMeUser#2026' }
-  });
-  const delMeToken = delMeLogin.json?.data?.tokens?.accessToken;
-  const delMeRes = await request('DELETE', '/api/v1/auth/me', {
-    token: delMeToken,
-    body: { password: 'DelMeUser#2026' }
-  });
-  recordTest(3, 'DELETE /auth/me self-deactivation', 200, delMeRes.status,
-    delMeRes.status === 200 ? 'PASS' : 'FAIL', 'User soft deleted via DELETE /me', 'AuthController_deactivateViaDelete');
-
-  // 19. Admin MFA enforcement
-  recordTest(3, '19. Admin MFA enforcement via RolesGuard', 403, 403, 'PASS',
-    'Verified: Un-enrolled admin receives 403 "MFA enrollment required" on protected admin routes');
-
-  // 8. Logout
-  const logoutRes = await request('POST', '/api/v1/auth/logout', { token: studentToken });
-  recordTest(3, '8. Logout POST /auth/logout', 200, logoutRes.status,
-    logoutRes.status === 200 ? 'PASS' : 'FAIL', 'Session logged out', 'AuthController_logout');
-
-  // 9. Post-logout token rejection
-  const postLogout = await request('GET', '/api/v1/auth/me', { token: studentToken });
-  recordTest(3, '9. Post-logout token rejection', 401, postLogout.status,
-    postLogout.status === 401 ? 'PASS' : 'FAIL', 'Revoked token rejected 401');
-
-  // Re-login student and parent
-  const sLog = await request('POST', '/api/v1/auth/login', { body: { email: 'demo-student@example.com', password: 'Demo#2026' } });
-  studentToken = sLog.json.data.tokens.accessToken;
-  const pLog = await request('POST', '/api/v1/auth/login', { body: { email: 'demo-parent@example.com', password: 'Demo#2026' } });
-  parentToken = pLog.json.data.tokens.accessToken;
-
-  // 10. Logout-all
-  const logoutAllRes = await request('POST', '/api/v1/auth/logout-all', { token: parentToken });
-  recordTest(3, '10. Logout all sessions POST /auth/logout-all', 200, logoutAllRes.status,
-    logoutAllRes.status === 200 ? 'PASS' : 'FAIL', 'All parent sessions revoked', 'AuthController_logoutAll');
-
-  // Re-login parent
-  const pLog2 = await request('POST', '/api/v1/auth/login', { body: { email: 'demo-parent@example.com', password: 'Demo#2026' } });
-  parentToken = pLog2.json.data.tokens.accessToken;
-
-  // =================================================================
-  // PHASE 4 — RBAC / AUTHORIZATION ACROSS DOMAINS
-  // =================================================================
-  console.log(`\n--- PHASE 4: RBAC / AUTHORIZATION ---`);
-
-  // No token -> 401
-  const noToken = await request('GET', '/api/v1/students');
-  recordTest(4, 'Missing token -> 401', 401, noToken.status, noToken.status === 401 ? 'PASS' : 'FAIL');
-
-  // Wrong role (Student calls admin-only POST /users) -> 403
-  const wrongRole = await request('POST', '/api/v1/users', {
-    token: studentToken,
-    body: { email: 'hacker@example.com', password: 'Pass#1234', role: 'ADMIN', fullName: 'Hacker' }
-  });
-  recordTest(4, 'Wrong role -> 403 (Student calling Admin route)', 403, wrongRole.status,
-    wrongRole.status === 403 ? 'PASS' : 'FAIL', 'Forbidden');
-
-  // Foreign resource (Student attempts to read another student's detail) -> 404 anti-probing
-  const foreignStudentRes = await request('GET', '/api/v1/students/8dc988a0-d531-4252-b729-c4162382baf1', {
-    token: studentToken
-  });
-  recordTest(4, 'Foreign resource -> 404 anti-probing (Student accessing another student)', 404, foreignStudentRes.status,
-    foreignStudentRes.status === 404 ? 'PASS' : 'FAIL', 'Ownership guard 404');
-
-  // Parent accessing unlinked student -> 404
-  const unlinkedChildRes = await request('GET', '/api/v1/students/7f4287ae-0529-448e-80d9-02e281a4b1c9', {
-    token: parentToken
-  });
-  recordTest(4, 'Parent accessing unlinked child -> 404', 404, unlinkedChildRes.status,
-    unlinkedChildRes.status === 404 ? 'PASS' : 'FAIL', 'Uniform 404');
-
-  // Own resource (Student calls /students/me) -> 200
-  const ownStudent = await request('GET', '/api/v1/students/me', { token: studentToken });
-  recordTest(4, 'Own resource -> 200 success', 200, ownStudent.status,
-    ownStudent.status === 200 ? 'PASS' : 'FAIL', 'Own resource accessible');
-
-  // =================================================================
-  // PHASE 5 — STUDENT MANAGEMENT
-  // =================================================================
-  console.log(`\n--- PHASE 5: STUDENT MANAGEMENT ---`);
-
-  // Admin creates test student
-  const createStu = await request('POST', '/api/v1/students', {
-    token: adminToken,
-    body: {
-      fullName: `UAT Student ${Date.now()}`,
-      dob: '2007-06-15',
-      gender: 'MALE',
-      phone: '0908889999',
-      address: '456 Tran Hung Dao, Q5',
-      medicalNotes: 'None'
+  // 3. Delete synthetic leave requests
+  for (const leaveId of Array.from(createdResources.leaves)) {
+    try {
+      const res = await request('DELETE', `/api/v1/leave-requests/${leaveId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.leaves.delete(leaveId);
+    } catch {
+      errors++;
     }
-  });
-  syntheticStudentId = createStu.json?.data?.id;
-  recordTest(5, 'Admin creates synthetic student', 201, createStu.status,
-    createStu.status === 201 && !!syntheticStudentId ? 'PASS' : 'FAIL',
-    `ID: ${syntheticStudentId}`, 'StudentsController_create');
+  }
 
-  // Admin reads student
-  const readStu = await request('GET', `/api/v1/students/${syntheticStudentId}`, { token: adminToken });
-  recordTest(5, 'Admin reads student detail', 200, readStu.status,
-    readStu.status === 200 && readStu.json?.data?.id === syntheticStudentId ? 'PASS' : 'FAIL',
-    'Detail matches created data', 'StudentsController_getById');
-
-  // Admin lists students
-  const listStu = await request('GET', '/api/v1/students?limit=10', { token: adminToken });
-  recordTest(5, 'Admin lists students', 200, listStu.status,
-    listStu.status === 200 && Array.isArray(listStu.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Total students: ${listStu.json?.data?.total}`, 'StudentsController_list');
-
-  // Admin updates allowed fields
-  const updateStu = await request('PATCH', `/api/v1/students/${syntheticStudentId}`, {
-    token: adminToken,
-    body: { phone: '0907776666', medicalNotes: 'Mild asthma' }
-  });
-  recordTest(5, 'Admin updates student fields', 200, updateStu.status,
-    updateStu.status === 200 && updateStu.json?.data?.medicalNotes === 'Mild asthma' ? 'PASS' : 'FAIL',
-    'Updated medical notes verified', 'StudentsController_update');
-
-  // Student views self
-  const viewSelf = await request('GET', '/api/v1/students/me', { token: studentToken });
-  recordTest(5, 'Student views self GET /students/me', 200, viewSelf.status,
-    viewSelf.status === 200 && !!viewSelf.json?.data?.fullName ? 'PASS' : 'FAIL',
-    `Student name: ${viewSelf.json?.data?.fullName}`, 'StudentsController_me');
-
-  // Student edits allowed contact fields
-  const editSelf = await request('PATCH', '/api/v1/students/me', {
-    token: studentToken,
-    body: { phone: '0901112222', address: 'Updated Address Q1' }
-  });
-  recordTest(5, 'Student edits allowed contact fields PATCH /students/me', 200, editSelf.status,
-    editSelf.status === 200 && editSelf.json?.data?.phone === '0901112222' ? 'PASS' : 'FAIL',
-    'Self-contact update verified', 'StudentsController_updateOwn');
-
-  // Protected field whitelist rejection
-  const rejectProtected = await request('PATCH', '/api/v1/students/me', {
-    token: studentToken,
-    body: { currentBeltRankId: 5, dob: '1990-01-01' }
-  });
-  recordTest(5, 'Protected field restrictions enforced (whitelist reject)', 400, rejectProtected.status,
-    rejectProtected.status === 400 ? 'PASS' : 'FAIL', 'Protected fields rejected with 400');
-
-  // Invite-code generation
-  const regenCode = await request('POST', `/api/v1/students/${syntheticStudentId}/invite-code`, { token: adminToken });
-  const inviteCode = regenCode.json?.data?.inviteCode;
-  recordTest(5, 'Admin generates invite-code for student', 200, regenCode.status,
-    regenCode.status === 200 && !!inviteCode ? 'PASS' : 'FAIL',
-    `Invite code: ${inviteCode}`, 'StudentsController_regenerateInviteCode');
-
-  // Soft-delete synthetic student
-  const softDelStu = await request('DELETE', `/api/v1/students/${syntheticStudentId}`, { token: adminToken });
-  recordTest(5, 'Admin soft-deletes synthetic student', 200, softDelStu.status,
-    softDelStu.status === 200 ? 'PASS' : 'FAIL', 'Soft-deleted', 'StudentsController_softDelete');
-
-  // Verify deleted student no longer appears in active read
-  const verifyDelStu = await request('GET', `/api/v1/students/${syntheticStudentId}`, { token: adminToken });
-  recordTest(5, 'Soft-deleted student returns 404', 404, verifyDelStu.status,
-    verifyDelStu.status === 404 ? 'PASS' : 'FAIL', 'Hidden from active reads');
-
-  // =================================================================
-  // PHASE 6 — PARENT / CHILD RELATIONSHIP
-  // =================================================================
-  console.log(`\n--- PHASE 6: PARENT / CHILD RELATIONSHIP ---`);
-
-  // Create another synthetic student to test parent linking
-  const parentTestStu = await request('POST', '/api/v1/students', {
-    token: adminToken,
-    body: { fullName: `UAT Child ${Date.now()}`, dob: '2015-08-10', gender: 'FEMALE' }
-  });
-  const childStudentId = parentTestStu.json?.data?.id;
-
-  // Generate invite code
-  const childInviteRes = await request('POST', `/api/v1/students/${childStudentId}/invite-code`, { token: adminToken });
-  const childInviteCode = childInviteRes.json?.data?.inviteCode;
-
-  // Parent claims invite code (LinkChildDto only takes inviteCode)
-  const linkRes = await request('POST', '/api/v1/parents/link', {
-    token: parentToken,
-    body: { inviteCode: childInviteCode }
-  });
-  recordTest(6, 'Parent claims child invite code POST /parents/link', 201, linkRes.status,
-    linkRes.status === 201 && linkRes.json?.data?.id === childStudentId ? 'PASS' : 'FAIL',
-    'Child linked', 'ParentsController_linkChild');
-
-  // Parent lists children
-  const myChildren = await request('GET', '/api/v1/parents/me/children', { token: parentToken });
-  const childPresent = myChildren.json?.data?.some(c => c.id === childStudentId);
-  recordTest(6, 'Parent child listing GET /parents/me/children', 200, myChildren.status,
-    myChildren.status === 200 && childPresent ? 'PASS' : 'FAIL',
-    `Children count: ${myChildren.json?.data?.length}`, 'ParentsController_myChildren');
-
-  // Duplicate claim rejected (single-use invite code -> 404)
-  const dupClaim = await request('POST', '/api/v1/parents/link', {
-    token: parentToken,
-    body: { inviteCode: childInviteCode }
-  });
-  recordTest(6, 'Duplicate invite code claim rejected 404', 404, dupClaim.status,
-    dupClaim.status === 404 ? 'PASS' : 'FAIL', 'Consumed code cannot be reused');
-
-  // Parent unlinks the child (Policy: verified child link requires club contact -> 409 Conflict)
-  const unlinkRes = await request('DELETE', `/api/v1/parents/links/${childStudentId}`, { token: parentToken });
-  recordTest(6, 'Unlinking verified child requires club (409 Conflict)', 409, unlinkRes.status,
-    unlinkRes.status === 409 ? 'PASS' : 'FAIL', 'Verified child link protected by club policy', 'ParentsController_unlink');
-
-  // Post-unlink access (verified child remains linked and accessible)
-  const postUnlinkAccess = await request('GET', `/api/v1/students/${childStudentId}`, { token: parentToken });
-  recordTest(6, 'Verified child remains accessible to linked parent', 200, postUnlinkAccess.status,
-    postUnlinkAccess.status === 200 ? 'PASS' : 'FAIL', 'Protected verified link remains active');
-
-  // Clean up child student
-  await request('DELETE', `/api/v1/students/${childStudentId}`, { token: adminToken });
-
-  // =================================================================
-  // PHASE 7 — CLASS / SCHEDULE / ENROLLMENT
-  // =================================================================
-  console.log(`\n--- PHASE 7: CLASS / SCHEDULE / ENROLLMENT ---`);
-
-  // Admin creates synthetic class
-  const createCls = await request('POST', '/api/v1/classes', {
-    token: adminToken,
-    body: {
-      name: `UAT Class ${Date.now()}`,
-      instructorId: instructorUserId,
-      capacity: 10,
-      location: 'Sân A — CLB Q.1'
+  // 4. Delete synthetic discounts
+  for (const discId of Array.from(createdResources.discounts)) {
+    try {
+      const res = await request('DELETE', `/api/v1/discounts/${discId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.discounts.delete(discId);
+    } catch {
+      errors++;
     }
-  });
-  syntheticClassId = createCls.json?.data?.id;
-  recordTest(7, 'Admin creates class POST /classes', 201, createCls.status,
-    createCls.status === 201 && !!syntheticClassId ? 'PASS' : 'FAIL',
-    `Class ID: ${syntheticClassId}`, 'ClassesController_create');
+  }
 
-  // Read class detail
-  const readCls = await request('GET', `/api/v1/classes/${syntheticClassId}`, { token: studentToken });
-  recordTest(7, 'Read class detail GET /classes/:id', 200, readCls.status,
-    readCls.status === 200 && readCls.json?.data?.id === syntheticClassId ? 'PASS' : 'FAIL',
-    'Class detail verified', 'ClassesController_getById');
-
-  // List classes
-  const listCls = await request('GET', '/api/v1/classes', { token: studentToken });
-  recordTest(7, 'List classes GET /classes', 200, listCls.status,
-    listCls.status === 200 && Array.isArray(listCls.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Classes total: ${listCls.json?.data?.total}`, 'ClassesController_list');
-
-  // Update class
-  const updateCls = await request('PATCH', `/api/v1/classes/${syntheticClassId}`, {
-    token: adminToken,
-    body: { capacity: 15 }
-  });
-  recordTest(7, 'Update class PATCH /classes/:id', 200, updateCls.status,
-    updateCls.status === 200 && updateCls.json?.data?.capacity === 15 ? 'PASS' : 'FAIL',
-    'Capacity updated to 15', 'ClassesController_update');
-
-  // Create schedule
-  const addSched = await request('POST', `/api/v1/classes/${syntheticClassId}/schedules`, {
-    token: adminToken,
-    body: { weekday: 2, startTime: '18:00', endTime: '19:30', effectiveFrom: '2026-09-01' }
-  });
-  syntheticScheduleId = addSched.json?.data?.id;
-  recordTest(7, 'Add class schedule POST /classes/:id/schedules', 201, addSched.status,
-    addSched.status === 201 && !!syntheticScheduleId ? 'PASS' : 'FAIL',
-    `Schedule ID: ${syntheticScheduleId}`, 'ClassesController_addSchedule');
-
-  // Remove schedule test
-  const delSched = await request('DELETE', `/api/v1/classes/${syntheticClassId}/schedules/${syntheticScheduleId}`, {
-    token: adminToken
-  });
-  recordTest(7, 'Remove class schedule DELETE /classes/:id/schedules/:scheduleId', 200, delSched.status,
-    delSched.status === 200 ? 'PASS' : 'FAIL', 'Schedule removed', 'ClassesController_removeSchedule');
-
-  // Re-add schedule
-  const addSched2 = await request('POST', `/api/v1/classes/${syntheticClassId}/schedules`, {
-    token: adminToken,
-    body: { weekday: 5, startTime: '18:00', endTime: '19:30', effectiveFrom: '2026-09-01' }
-  });
-  syntheticScheduleId = addSched2.json?.data?.id;
-
-  // Create a synthetic student to enroll
-  const enrollStu = await request('POST', '/api/v1/students', {
-    token: adminToken,
-    body: { fullName: `UAT Enrollee ${Date.now()}`, dob: '2004-03-01', gender: 'MALE' }
-  });
-  const enrollStudentId = enrollStu.json?.data?.id;
-
-  // Enroll student
-  const createEnroll = await request('POST', '/api/v1/enrollments', {
-    token: adminToken,
-    body: { classId: syntheticClassId, studentId: enrollStudentId }
-  });
-  syntheticEnrollmentId = createEnroll.json?.data?.id;
-  recordTest(7, 'Enroll student in class POST /enrollments', 201, createEnroll.status,
-    createEnroll.status === 201 && !!syntheticEnrollmentId ? 'PASS' : 'FAIL',
-    `Enrollment ID: ${syntheticEnrollmentId}`, 'EnrollmentsController_create');
-
-  // List enrollments
-  const listEnroll = await request('GET', `/api/v1/enrollments?classId=${syntheticClassId}`, { token: adminToken });
-  recordTest(7, 'List enrollments GET /enrollments', 200, listEnroll.status,
-    listEnroll.status === 200 && listEnroll.json?.data?.items?.length >= 1 ? 'PASS' : 'FAIL',
-    `Enrolled count: ${listEnroll.json?.data?.items?.length}`, 'EnrollmentsController_list');
-
-  // Duplicate enrollment rejected
-  const dupEnroll = await request('POST', '/api/v1/enrollments', {
-    token: adminToken,
-    body: { classId: syntheticClassId, studentId: enrollStudentId }
-  });
-  recordTest(7, 'Duplicate enrollment rejected 409', 409, dupEnroll.status,
-    dupEnroll.status === 409 ? 'PASS' : 'FAIL', 'Duplicate enrollment conflict');
-
-  // Soft leave
-  const leaveEnroll = await request('DELETE', `/api/v1/enrollments/${syntheticEnrollmentId}`, { token: adminToken });
-  recordTest(7, 'Soft leave enrollment DELETE /enrollments/:id', 200, leaveEnroll.status,
-    leaveEnroll.status === 200 ? 'PASS' : 'FAIL', 'Left class (soft leave)', 'EnrollmentsController_remove');
-
-  // Re-enroll on the same day rejected per business rules
-  const rejoinSameDay = await request('POST', '/api/v1/enrollments', {
-    token: adminToken,
-    body: { classId: syntheticClassId, studentId: enrollStudentId }
-  });
-  recordTest(7, 'Same-day re-enrollment rejected 409', 409, rejoinSameDay.status,
-    rejoinSameDay.status === 409 ? 'PASS' : 'FAIL', 'Same-day rejoin rejected');
-
-  // Foreign class access by instructor -> 403 (Admin only)
-  const instr2Res = await request('POST', '/api/v1/users', {
-    token: adminToken,
-    body: { email: `live-uat-instr2-${Date.now()}@example.com`, password: 'InstrTwo#2026', role: 'INSTRUCTOR', fullName: 'Instructor Two' }
-  });
-  const instr2Login = await request('POST', '/api/v1/auth/login', {
-    body: { email: instr2Res.json?.data?.email, password: 'InstrTwo#2026' }
-  });
-  const instr2Token = instr2Login.json?.data?.tokens?.accessToken;
-
-  const foreignClsManage = await request('PATCH', `/api/v1/classes/${syntheticClassId}`, {
-    token: instr2Token,
-    body: { capacity: 50 }
-  });
-  recordTest(7, 'Foreign class instructor operation rejected 403', 403, foreignClsManage.status,
-    foreignClsManage.status === 403 ? 'PASS' : 'FAIL', 'Instructor cannot mutate classes (Admin only)');
-
-  // =================================================================
-  // PHASE 8 — ATTENDANCE
-  // =================================================================
-  console.log(`\n--- PHASE 8: ATTENDANCE ---`);
-
-  const basicClassId = 'a5ffc83b-daa5-4d3f-8809-dbc1b82c0107';
-  const demoStudentProfileId = '7f4287ae-0529-448e-80d9-02e281a4b1c9';
-  const sessionDate = new Date(Date.now() + (60 + Math.floor(Math.random() * 40)) * 86400000).toISOString().slice(0, 10);
-
-  // Create attendance session
-  const createSession = await request('POST', '/api/v1/attendance-sessions', {
-    token: instructorToken,
-    body: { classId: basicClassId, sessionDate }
-  });
-  syntheticSessionId = createSession.json?.data?.id;
-  recordTest(8, 'Create attendance session POST /attendance-sessions', 201, createSession.status,
-    createSession.status === 201 && !!syntheticSessionId ? 'PASS' : 'FAIL',
-    `Session ID: ${syntheticSessionId}`, 'AttendanceController_createSession');
-
-  // Attendance history
-  const stuAttHistory = await request('GET', `/api/v1/students/${demoStudentProfileId}/attendance`, {
-    token: studentToken
-  });
-  recordTest(8, 'Student attendance history GET /students/:id/attendance', 200, stuAttHistory.status,
-    stuAttHistory.status === 200 && Array.isArray(stuAttHistory.json?.data?.items) ? 'PASS' : 'FAIL',
-    `History records: ${stuAttHistory.json?.data?.items?.length}`, 'AttendanceController_history');
-
-  // Attendance summary
-  const attSummary = await request('GET', `/api/v1/attendance/summary?studentId=${demoStudentProfileId}&month=2026-09`, {
-    token: studentToken
-  });
-  recordTest(8, 'Attendance summary GET /attendance/summary', 200, attSummary.status,
-    attSummary.status === 200 ? 'PASS' : 'FAIL',
-    `Total: ${attSummary.json?.data?.totalSessions}`, 'AttendanceController_summary');
-
-  // Monthly attendance report (Admin)
-  const attMonthly = await request('GET', `/api/v1/admin/reports/attendance?month=2026-09`, {
-    token: adminToken
-  });
-  recordTest(8, 'Attendance monthly report GET /admin/reports/attendance', 200, attMonthly.status,
-    attMonthly.status === 200 && Array.isArray(attMonthly.json?.data) ? 'PASS' : 'FAIL',
-    `Classes reported: ${attMonthly.json?.data?.length}`, 'AttendanceController_monthlyReport');
-
-  // Bulk upsert records
-  if (syntheticSessionId) {
-    const upsertRec = await request('POST', `/api/v1/attendance-sessions/${syntheticSessionId}/records`, {
-      token: instructorToken,
-      body: {
-        records: [{ studentId: demoStudentProfileId, status: 'PRESENT', note: 'UAT verified' }]
+  // 5. Remove synthetic schedules
+  for (const schedId of Array.from(createdResources.schedules)) {
+    try {
+      if (classAId) {
+        const res = await request('DELETE', `/api/v1/classes/${classAId}/schedules/${schedId}`, {
+          token: adminToken,
+        });
+        if (res.status === 200 || res.status === 404) createdResources.schedules.delete(schedId);
       }
-    });
-    recordTest(8, 'Bulk upsert attendance records POST /attendance-sessions/:id/records', 200, upsertRec.status,
-      upsertRec.status === 200 ? 'PASS' : 'FAIL', 'Upserted records', 'AttendanceController_upsertRecords');
-
-    const listRecs = await request('GET', `/api/v1/attendance-sessions/${syntheticSessionId}/records`, {
-      token: instructorToken
-    });
-    recordTest(8, 'List attendance records GET /attendance-sessions/:id/records', 200, listRecs.status,
-      listRecs.status === 200 ? 'PASS' : 'FAIL', `Records count: ${listRecs.json?.data?.length}`, 'AttendanceController_listRecords');
-  } else {
-    operationCoverage.get('AttendanceController_upsertRecords').covered = true;
-    operationCoverage.get('AttendanceController_upsertRecords').status = 200;
-    operationCoverage.get('AttendanceController_upsertRecords').result = 'PASS';
-    operationCoverage.get('AttendanceController_upsertRecords').workflow = 'Pre-verified session records';
-    operationCoverage.get('AttendanceController_listRecords').covered = true;
-    operationCoverage.get('AttendanceController_listRecords').status = 200;
-    operationCoverage.get('AttendanceController_listRecords').result = 'PASS';
-    operationCoverage.get('AttendanceController_listRecords').workflow = 'Pre-verified session records';
-  }
-
-  // Foreign class instructor attendance creation -> 404
-  const foreignAtt = await request('POST', '/api/v1/attendance-sessions', {
-    token: instr2Token,
-    body: { classId: basicClassId, sessionDate: '2026-09-30' }
-  });
-  recordTest(8, 'Foreign instructor attendance session rejected 404', 404, foreignAtt.status,
-    foreignAtt.status === 404 ? 'PASS' : 'FAIL', 'Instructor scope enforced');
-
-  // =================================================================
-  // PHASE 9 — BELTS / EXAMS / PROMOTION
-  // =================================================================
-  console.log(`\n--- PHASE 9: BELTS / EXAMS / PROMOTION ---`);
-
-  // Belt ranks list
-  const beltRanks = await request('GET', '/api/v1/belt-ranks', { token: studentToken });
-  recordTest(9, 'Belt rank catalog GET /belt-ranks', 200, beltRanks.status,
-    beltRanks.status === 200 && beltRanks.json?.data?.length >= 15 ? 'PASS' : 'FAIL',
-    `Ranks: ${beltRanks.json?.data?.length}`, 'BeltsController_list');
-
-  // Admin creates a synthetic belt rank (orderIndex unique across catalog)
-  const newRankCode = `TEST_${Date.now().toString().slice(-4)}`;
-  const uniqueOrder = Math.floor(2000 + Math.random() * 7000);
-  const createRank = await request('POST', '/api/v1/belt-ranks', {
-    token: adminToken,
-    body: { code: newRankCode, name: 'Test Rank', rankGroup: 'LAM', orderIndex: uniqueOrder }
-  });
-  const testRankId = createRank.json?.data?.id;
-  recordTest(9, 'Admin creates belt rank POST /belt-ranks', 201, createRank.status,
-    createRank.status === 201 && !!testRankId ? 'PASS' : 'FAIL',
-    `Rank ID: ${testRankId}`, 'BeltsController_create');
-
-  // Admin updates belt rank
-  const rankToUpdateId = testRankId || 1;
-  const updateRank = await request('PATCH', `/api/v1/belt-ranks/${rankToUpdateId}`, {
-    token: adminToken,
-    body: { name: 'Test Rank Updated' }
-  });
-  recordTest(9, 'Admin updates belt rank PATCH /belt-ranks/:id', 200, updateRank.status,
-    updateRank.status === 200 ? 'PASS' : 'FAIL', 'Rank updated', 'BeltsController_update');
-
-  // Belt distribution report (data has distribution array)
-  const beltDist = await request('GET', '/api/v1/admin/reports/belts', { token: adminToken });
-  recordTest(9, 'Belt distribution report GET /admin/reports/belts', 200, beltDist.status,
-    beltDist.status === 200 && Array.isArray(beltDist.json?.data?.distribution) ? 'PASS' : 'FAIL',
-    `Distribution items: ${beltDist.json?.data?.distribution?.length}`, 'BeltReportsController_distribution');
-
-  // Determine student's current belt rank to set next target rank (avoids "already holds this rank")
-  const curStu = await request('GET', '/api/v1/students/me', { token: studentToken });
-  const curRankId = curStu.json?.data?.currentBeltRankId || 1;
-  const nextTargetRankId = curRankId < 15 ? curRankId + 1 : 15;
-
-  // Create synthetic exam
-  const examDate = '2026-10-15';
-  const regDeadline = '2026-10-10';
-  const createExam = await request('POST', '/api/v1/belt-exams', {
-    token: adminToken,
-    body: {
-      title: `UAT Belt Exam ${Date.now()}`,
-      examDate,
-      registrationDeadline: regDeadline,
-      targetRankId: nextTargetRankId,
-      feeAmount: 250000,
-      capacity: 20
-    }
-  });
-  syntheticExamId = createExam.json?.data?.id;
-  recordTest(9, 'Admin creates exam POST /belt-exams', 201, createExam.status,
-    createExam.status === 201 && !!syntheticExamId ? 'PASS' : 'FAIL',
-    `Exam ID: ${syntheticExamId}`, 'ExamsController_create');
-
-  // Read exam detail
-  const readExam = await request('GET', `/api/v1/belt-exams/${syntheticExamId}`, { token: studentToken });
-  recordTest(9, 'Get exam detail GET /belt-exams/:id', 200, readExam.status,
-    readExam.status === 200 && readExam.json?.data?.id === syntheticExamId ? 'PASS' : 'FAIL',
-    'Exam detail verified', 'ExamsController_getById');
-
-  // List exams
-  const listExams = await request('GET', '/api/v1/belt-exams', { token: studentToken });
-  recordTest(9, 'List exams GET /belt-exams', 200, listExams.status,
-    listExams.status === 200 && Array.isArray(listExams.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Total exams: ${listExams.json?.data?.total}`, 'ExamsController_list');
-
-  // Update exam (open exam)
-  const updateExam = await request('PATCH', `/api/v1/belt-exams/${syntheticExamId}`, {
-    token: adminToken,
-    body: { status: 'OPEN' }
-  });
-  recordTest(9, 'Open exam for registration PATCH /belt-exams/:id', 200, updateExam.status,
-    updateExam.status === 200 && updateExam.json?.data?.status === 'OPEN' ? 'PASS' : 'FAIL',
-    'Status=OPEN', 'ExamsController_update');
-
-  // Student registers for exam (creates atomic invoice)
-  const registerExam = await request('POST', `/api/v1/belt-exams/${syntheticExamId}/register`, {
-    token: studentToken,
-    body: { studentId: demoStudentProfileId }
-  });
-  syntheticRegistrationId = registerExam.json?.data?.id;
-  const examInvoiceId = registerExam.json?.data?.invoice?.id;
-  recordTest(9, 'Student registers for exam POST /belt-exams/:id/register (Atomic invoice created)', 201, registerExam.status,
-    registerExam.status === 201 && !!syntheticRegistrationId && !!examInvoiceId ? 'PASS' : 'FAIL',
-    `Reg ID: ${syntheticRegistrationId}, Invoice ID: ${examInvoiceId}`, 'ExamsController_register');
-
-  // List student exam registrations
-  const listRegs = await request('GET', `/api/v1/exam-registrations?studentId=${demoStudentProfileId}`, {
-    token: studentToken
-  });
-  recordTest(9, 'List student exam registrations GET /exam-registrations', 200, listRegs.status,
-    listRegs.status === 200 && listRegs.json?.data?.items?.length >= 1 ? 'PASS' : 'FAIL',
-    `Registrations: ${listRegs.json?.data?.items?.length}`, 'ExamsController_listStudentRegistrations');
-
-  // Duplicate registration rejected
-  const dupRegExam = await request('POST', `/api/v1/belt-exams/${syntheticExamId}/register`, {
-    token: studentToken,
-    body: { studentId: demoStudentProfileId }
-  });
-  recordTest(9, 'Duplicate exam registration rejected 409', 409, dupRegExam.status,
-    dupRegExam.status === 409 ? 'PASS' : 'FAIL', 'Duplicate registration conflict');
-
-  // Record result PASS -> promotes belt rank
-  const passResult = await request('POST', `/api/v1/exam-registrations/${syntheticRegistrationId}/result`, {
-    token: adminToken,
-    body: { status: 'RESULT_PASS', resultNote: 'Passed with distinction' }
-  });
-  recordTest(9, 'Record exam result PASS POST /exam-registrations/:id/result', 200, passResult.status,
-    passResult.status === 200 && passResult.json?.data?.status === 'RESULT_PASS' ? 'PASS' : 'FAIL',
-    'Result PASS recorded and rank promoted', 'ExamsController_recordResult');
-
-  // Verify student belt rank promoted
-  const updatedStuProfile = await request('GET', '/api/v1/students/me', { token: studentToken });
-  recordTest(9, `Verify student belt rank promoted to ${nextTargetRankId}`, nextTargetRankId, updatedStuProfile.json?.data?.currentBeltRankId,
-    updatedStuProfile.json?.data?.currentBeltRankId === nextTargetRankId ? 'PASS' : 'FAIL',
-    `Current rank: ${updatedStuProfile.json?.data?.currentBeltRankId}`);
-
-  // Re-entry rejected (result is final)
-  const reEntryResult = await request('POST', `/api/v1/exam-registrations/${syntheticRegistrationId}/result`, {
-    token: adminToken,
-    body: { status: 'RESULT_PASS', resultNote: 'Re-entry attempt' }
-  });
-  recordTest(9, 'Result re-entry rejected 409 (Finality)', 409, reEntryResult.status,
-    reEntryResult.status === 409 ? 'PASS' : 'FAIL', 'Results are final');
-
-
-  // =================================================================
-  // PHASE 10 — BILLING
-  // =================================================================
-  console.log(`\n--- PHASE 10: BILLING ---`);
-
-  // Admin creates manual invoice (type: 'OTHER')
-  const createInv = await request('POST', '/api/v1/invoices', {
-    token: adminToken,
-    body: {
-      studentId: demoStudentProfileId,
-      type: 'OTHER',
-      dueDate: '2026-10-31',
-      items: [
-        { description: 'Võ phục Vovinam', quantity: 1, unitAmount: 450000 }
-      ]
-    }
-  });
-  syntheticInvoiceId = createInv.json?.data?.id;
-  recordTest(10, 'Admin creates invoice POST /invoices', 201, createInv.status,
-    createInv.status === 201 && !!syntheticInvoiceId ? 'PASS' : 'FAIL',
-    `Invoice ID: ${syntheticInvoiceId}, No: ${createInv.json?.data?.invoiceNo}`, 'BillingController_create');
-
-  // Get invoice detail
-  const getInv = await request('GET', `/api/v1/invoices/${syntheticInvoiceId}`, { token: studentToken });
-  const invTotal = getInv.json?.data?.total;
-  recordTest(10, 'Get invoice detail GET /invoices/:id', 200, getInv.status,
-    getInv.status === 200 && invTotal === 450000 ? 'PASS' : 'FAIL',
-    `Total: ${invTotal}`, 'BillingController_getById');
-
-  // List invoices
-  const listInvs = await request('GET', '/api/v1/invoices', { token: studentToken });
-  recordTest(10, 'List invoices GET /invoices', 200, listInvs.status,
-    listInvs.status === 200 && Array.isArray(listInvs.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Invoices total: ${listInvs.json?.data?.total}`, 'BillingController_list');
-
-  // Monthly invoice generation (pass month, year, classIds)
-  const genMonthly = await request('POST', '/api/v1/admin/billing/generate-monthly', {
-    token: adminToken,
-    body: { month: 11, year: 2026, classIds: [basicClassId] }
-  });
-  recordTest(10, 'Generate monthly invoices POST /admin/billing/generate-monthly', 200, genMonthly.status,
-    genMonthly.status === 200 ? 'PASS' : 'FAIL',
-    `Generated: ${genMonthly.json?.data?.created}, Skipped: ${genMonthly.json?.data?.skippedExisting}`, 'BillingController_generateMonthly');
-
-  // Rerun monthly generation (idempotency check)
-  const rerunMonthly = await request('POST', '/api/v1/admin/billing/generate-monthly', {
-    token: adminToken,
-    body: { month: 11, year: 2026, classIds: [basicClassId] }
-  });
-  recordTest(10, 'Rerun monthly generation is idempotent (created = 0)', 0, rerunMonthly.json?.data?.created,
-    rerunMonthly.status === 200 && rerunMonthly.json?.data?.created === 0 ? 'PASS' : 'FAIL',
-    'Idempotency UQ key verified');
-
-  // Billing settings GET
-  const billSettings = await request('GET', '/api/v1/admin/billing/settings', { token: adminToken });
-  recordTest(10, 'Get billing settings GET /admin/billing/settings', 200, billSettings.status,
-    billSettings.status === 200 ? 'PASS' : 'FAIL', 'Settings retrieved', 'BillingController_getSettings');
-
-  // Tuition rates PUT
-  const updateRates = await request('PUT', '/api/v1/admin/billing/settings/tuition-rates', {
-    token: adminToken,
-    body: { rates: [{ classId: basicClassId, monthlyAmount: 400000 }] }
-  });
-  recordTest(10, 'Update tuition rates PUT /admin/billing/settings/tuition-rates', 200, updateRates.status,
-    updateRates.status === 200 ? 'PASS' : 'FAIL', 'Tuition rates updated', 'BillingController_updateTuitionRates');
-
-  // Bank account PUT
-  const updateBank = await request('PUT', '/api/v1/admin/billing/settings/bank-account', {
-    token: adminToken,
-    body: { bankAccount: { ownerType: 'BUSINESS', bin: '970422', number: '123456789', name: 'VOVINAM CLUB' } }
-  });
-  recordTest(10, 'Update bank account PUT /admin/billing/settings/bank-account', 200, updateBank.status,
-    updateBank.status === 200 ? 'PASS' : 'FAIL', 'Bank account updated', 'BillingController_updateBankAccount');
-
-  // Revenue report
-  const revReport = await request('GET', '/api/v1/admin/reports/revenue?from=2026-09-01&to=2026-09-30', { token: adminToken });
-  recordTest(10, 'Revenue report GET /admin/reports/revenue', 200, revReport.status,
-    revReport.status === 200 ? 'PASS' : 'FAIL', 'Revenue report generated', 'BillingController_revenue');
-
-  // Tuition report
-  const tuiReport = await request('GET', '/api/v1/admin/reports/tuition?month=9&year=2026', { token: adminToken });
-  recordTest(10, 'Tuition report GET /admin/reports/tuition', 200, tuiReport.status,
-    tuiReport.status === 200 ? 'PASS' : 'FAIL', 'Tuition report generated', 'BillingController_tuitionReport');
-
-  // =================================================================
-  // PHASE 11 — PAYMENT
-  // =================================================================
-  console.log(`\n--- PHASE 11: PAYMENT ---`);
-
-  // Gateway determination: simulated
-  recordTest(11, 'Determine live PAYMENTS_GATEWAY', 'simulated', 'simulated', 'PASS',
-    'Verified via live probe: simulated gateway configured on Render');
-
-  // QR creation
-  const qrRes = await request('POST', `/api/v1/payments/qr/${syntheticInvoiceId}`, { token: studentToken });
-  const orderRef = qrRes.json?.data?.orderRef;
-  recordTest(11, 'Create QR payment POST /payments/qr/:invoiceId', 201, qrRes.status,
-    qrRes.status === 201 && !!orderRef ? 'PASS' : 'FAIL',
-    `Order ref: ${orderRef}`, 'PaymentsController_createQrPayment');
-
-  // List payments for invoice
-  const listPayments = await request('GET', `/api/v1/payments?invoiceId=${syntheticInvoiceId}`, { token: studentToken });
-  recordTest(11, 'List payments for invoice GET /payments', 200, listPayments.status,
-    listPayments.status === 200 && Array.isArray(listPayments.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Payments count: ${listPayments.json?.data?.items?.length}`, 'PaymentsController_listForInvoice');
-
-  // Confirm cash payment
-  const cashRes = await request('POST', `/api/v1/payments/${syntheticInvoiceId}/confirm-cash`, {
-    token: adminToken,
-    body: { note: 'Cash payment collected at club desk' }
-  });
-  recordTest(11, 'Confirm cash payment POST /payments/:invoiceId/confirm-cash', 200, cashRes.status,
-    cashRes.status === 200 && cashRes.json?.data?.status === 'SUCCESS' ? 'PASS' : 'FAIL',
-    'Payment created with status SUCCESS', 'PaymentsController_confirmCash');
-
-  // Double cash confirmation rejected (idempotency claim on status flip)
-  const doubleCash = await request('POST', `/api/v1/payments/${syntheticInvoiceId}/confirm-cash`, {
-    token: adminToken,
-    body: { note: 'Double confirm' }
-  });
-  recordTest(11, 'Double cash confirm conflict 409', 409, doubleCash.status,
-    doubleCash.status === 409 ? 'PASS' : 'FAIL', 'Claim-first invoice flip prevents double confirm');
-
-  // Payment refund / dispute
-  const successfulPaymentId = cashRes.json?.data?.id;
-  if (successfulPaymentId) {
-    const refundRes = await request('PATCH', `/api/v1/payments/${successfulPaymentId}`, {
-      token: adminToken,
-      body: { status: 'REFUNDED', note: 'Accidental charge refund' }
-    });
-    recordTest(11, 'Admin refunds payment PATCH /payments/:id', 200, refundRes.status,
-      refundRes.status === 200 && refundRes.json?.data?.status === 'REFUNDED' ? 'PASS' : 'FAIL',
-      'Payment REFUNDED, invoice re-derives to UNPAID', 'PaymentsController_setOutcome');
-  }
-
-  // Webhook invalid signature test
-  const webhookBadSig = await request('POST', '/api/v1/payments/webhook/simulated', {
-    headers: { 'Content-Type': 'application/json', 'x-signature': 'invalid-signature-hex' },
-    body: JSON.stringify({ test: 1 })
-  });
-  recordTest(11, 'Webhook invalid signature rejected 401', 401, webhookBadSig.status,
-    webhookBadSig.status === 401 ? 'PASS' : 'FAIL',
-    'Unauthorized on bad HMAC signature', 'PaymentsController_webhook');
-
-  // Live real provider callback classification
-  recordTest(11, 'Real gateway provider callback execution', 'Real gateway callback', 'BLOCKED',
-    'BLOCKED — REAL GATEWAY CALLBACK NOT AVAILABLE (Provider credentials/secret live on host, no real money spent)');
-
-  // =================================================================
-  // PHASE 12 — ANNOUNCEMENTS / CLUB ACTIVITIES
-  // =================================================================
-  console.log(`\n--- PHASE 12: ANNOUNCEMENTS ---`);
-
-  // Admin posts club-wide announcement
-  const createAnn = await request('POST', '/api/v1/announcements', {
-    token: adminToken,
-    body: { title: `Club Championship ${Date.now()}`, body: 'Upcoming national club tournament.', audience: 'ALL' }
-  });
-  const syntheticAnnId = createAnn.json?.data?.id;
-  recordTest(12, 'Admin posts club-wide announcement POST /announcements', 201, createAnn.status,
-    createAnn.status === 201 && !!syntheticAnnId ? 'PASS' : 'FAIL',
-    `Announcement ID: ${syntheticAnnId}`, 'AnnouncementsController_create');
-
-  // Student feed shows announcement
-  const studentFeed = await request('GET', '/api/v1/announcements', { token: studentToken });
-  const annPresent = studentFeed.json?.data?.items?.some(a => a.id === syntheticAnnId);
-  recordTest(12, 'Student feed shows announcement GET /announcements', 200, studentFeed.status,
-    studentFeed.status === 200 && annPresent ? 'PASS' : 'FAIL',
-    'Club-wide announcement visible in feed', 'AnnouncementsController_list');
-
-  // Update announcement
-  const updateAnn = await request('PATCH', `/api/v1/announcements/${syntheticAnnId}`, {
-    token: adminToken,
-    body: { title: 'Updated Tournament Notice' }
-  });
-  recordTest(12, 'Update announcement PATCH /announcements/:id', 200, updateAnn.status,
-    updateAnn.status === 200 ? 'PASS' : 'FAIL', 'Title updated', 'AnnouncementsController_update');
-
-  // Delete announcement
-  const deleteAnn = await request('DELETE', `/api/v1/announcements/${syntheticAnnId}`, { token: adminToken });
-  recordTest(12, 'Delete announcement DELETE /announcements/:id', 200, deleteAnn.status,
-    deleteAnn.status === 200 ? 'PASS' : 'FAIL', 'Announcement deleted', 'AnnouncementsController_remove');
-
-  // Audience isolation negative test: instructor cannot post club-wide (Admin only)
-  const instrClubAnn = await request('POST', '/api/v1/announcements', {
-    token: instructorToken,
-    body: { title: 'Hacked Club Wide', body: 'Spam', audience: 'ALL' }
-  });
-  recordTest(12, 'Instructor cannot post club-wide announcement (403)', 403, instrClubAnn.status,
-    instrClubAnn.status === 403 ? 'PASS' : 'FAIL', 'Audience isolation enforced');
-
-  // =================================================================
-  // PHASE 13 — LEAVE REQUESTS
-  // =================================================================
-  console.log(`\n--- PHASE 13: LEAVE REQUESTS ---`);
-
-  // Student creates leave request for a unique future date
-  const tomorrowStr = new Date(Date.now() + (120 + Math.floor(Math.random() * 60)) * 86400000).toISOString().slice(0, 10);
-  const createLeave = await request('POST', '/api/v1/leave-requests', {
-    token: studentToken,
-    body: {
-      studentId: demoStudentProfileId,
-      classId: basicClassId,
-      sessionDate: tomorrowStr,
-      reason: 'UAT medical appointment'
-    }
-  });
-  syntheticLeaveId = createLeave.json?.data?.id;
-  recordTest(13, 'Student creates leave request POST /leave-requests', 201, createLeave.status,
-    createLeave.status === 201 && !!syntheticLeaveId ? 'PASS' : 'FAIL',
-    `Leave ID: ${syntheticLeaveId}`, 'LeavesController_create');
-
-  // Duplicate leave request for same session conflicts
-  const dupLeave = await request('POST', '/api/v1/leave-requests', {
-    token: studentToken,
-    body: {
-      studentId: demoStudentProfileId,
-      classId: basicClassId,
-      sessionDate: tomorrowStr,
-      reason: 'Duplicate request'
-    }
-  });
-  recordTest(13, 'Duplicate leave request conflict 409', 409, dupLeave.status,
-    dupLeave.status === 409 ? 'PASS' : 'FAIL', 'UQ(student, class, sessionDate) enforced');
-
-  // Past date validation
-  const pastLeave = await request('POST', '/api/v1/leave-requests', {
-    token: studentToken,
-    body: {
-      studentId: demoStudentProfileId,
-      classId: basicClassId,
-      sessionDate: '2020-01-01',
-      reason: 'Past date'
-    }
-  });
-  recordTest(13, 'Past date leave request rejected 400', 400, pastLeave.status,
-    pastLeave.status === 400 ? 'PASS' : 'FAIL', 'Date validation verified');
-
-  // List leave requests
-  const listLeaves = await request('GET', '/api/v1/leave-requests', { token: studentToken });
-  recordTest(13, 'List leave requests GET /leave-requests', 200, listLeaves.status,
-    listLeaves.status === 200 && Array.isArray(listLeaves.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Leaves count: ${listLeaves.json?.data?.total}`, 'LeavesController_list');
-
-  // Review leave request by own class instructor (ReviewLeaveRequestDto: note)
-  const reviewLeave = await request('POST', `/api/v1/leave-requests/${syntheticLeaveId}/review`, {
-    token: instructorToken,
-    body: { status: 'APPROVED', note: 'Approved for medical reason' }
-  });
-  recordTest(13, 'Instructor reviews leave request POST /leave-requests/:id/review', 200, reviewLeave.status,
-    reviewLeave.status === 200 && reviewLeave.json?.data?.status === 'APPROVED' ? 'PASS' : 'FAIL',
-    'Leave APPROVED', 'LeavesController_review');
-
-  // Final state protection (reviewed request cannot be reviewed again)
-  const reReviewLeave = await request('POST', `/api/v1/leave-requests/${syntheticLeaveId}/review`, {
-    token: instructorToken,
-    body: { status: 'REJECTED' }
-  });
-  recordTest(13, 'Reviewed leave request cannot be reviewed again (409)', 409, reReviewLeave.status,
-    reReviewLeave.status === 409 ? 'PASS' : 'FAIL', 'Final state protected');
-
-  // Cancel leave request test
-  const cancelDateStr = new Date(Date.now() + 172800000).toISOString().slice(0, 10);
-  const leaveToCancel = await request('POST', '/api/v1/leave-requests', {
-    token: studentToken,
-    body: { studentId: demoStudentProfileId, classId: basicClassId, sessionDate: cancelDateStr, reason: 'To cancel' }
-  });
-  const cancelLeaveId = leaveToCancel.json?.data?.id;
-  const cancelRes = await request('POST', `/api/v1/leave-requests/${cancelLeaveId}/cancel`, {
-    token: studentToken
-  });
-  recordTest(13, 'Requester cancels pending leave POST /leave-requests/:id/cancel', 200, cancelRes.status,
-    cancelRes.status === 200 && cancelRes.json?.data?.status === 'CANCELLED' ? 'PASS' : 'FAIL',
-    'Leave CANCELLED', 'LeavesController_cancel');
-
-  // Admin deletes leave request
-  const delLeave = await request('DELETE', `/api/v1/leave-requests/${cancelLeaveId}`, { token: adminToken });
-  recordTest(13, 'Admin deletes leave request DELETE /leave-requests/:id', 200, delLeave.status,
-    delLeave.status === 200 ? 'PASS' : 'FAIL', 'Deleted', 'LeavesController_delete');
-
-  // Foreign instructor review is 404 (needs a pending leave request)
-  const foreignTestDateStr = new Date(Date.now() + 259200000).toISOString().slice(0, 10);
-  const foreignLeaveReq = await request('POST', '/api/v1/leave-requests', {
-    token: studentToken,
-    body: { studentId: demoStudentProfileId, classId: basicClassId, sessionDate: foreignTestDateStr, reason: 'Foreign review test' }
-  });
-  const foreignLeaveId = foreignLeaveReq.json?.data?.id;
-  const foreignReview = await request('POST', `/api/v1/leave-requests/${foreignLeaveId}/review`, {
-    token: instr2Token,
-    body: { status: 'APPROVED' }
-  });
-  recordTest(13, 'Foreign instructor review is uniform 404', 404, foreignReview.status,
-    foreignReview.status === 404 ? 'PASS' : 'FAIL', 'Foreign instructor ownership guard');
-  if (foreignLeaveId) {
-    await request('DELETE', `/api/v1/leave-requests/${foreignLeaveId}`, { token: adminToken });
-  }
-
-  // =================================================================
-  // PHASE 14 — PROMOTION PROPOSALS
-  // =================================================================
-  console.log(`\n--- PHASE 14: PROMOTION PROPOSALS ---`);
-
-  // Clear any pre-existing PENDING proposal for student so we start from a clean state
-  const existingProps = await request('GET', '/api/v1/promotion-proposals', { token: instructorToken });
-  const openProp = existingProps.json?.data?.items?.find(p => p.studentId === demoStudentProfileId && p.status === 'PENDING');
-  if (openProp) {
-    await request('POST', `/api/v1/promotion-proposals/${openProp.id}/review`, {
-      token: adminToken,
-      body: { status: 'REJECTED', note: 'Pre-existing proposal closed for clean UAT run' }
-    });
-  }
-
-  // Determine target proposed rank strictly above student's current rank
-  const stuPropProfile = await request('GET', '/api/v1/students/me', { token: studentToken });
-  const stuCurrentRank = stuPropProfile.json?.data?.currentBeltRankId || 1;
-  const propRankId = stuCurrentRank < 15 ? stuCurrentRank + 1 : 15;
-
-  // Instructor proposes next rank for own student (CreatePromotionProposalDto: proposedRankId)
-  const createProp = await request('POST', '/api/v1/promotion-proposals', {
-    token: instructorToken,
-    body: {
-      studentId: demoStudentProfileId,
-      proposedRankId: propRankId,
-      note: 'Dedicated student, solid techniques'
-    }
-  });
-  syntheticProposalId = createProp.json?.data?.id;
-  recordTest(14, 'Instructor proposes next rank POST /promotion-proposals', 201, createProp.status,
-    createProp.status === 201 && !!syntheticProposalId ? 'PASS' : 'FAIL',
-    `Proposal ID: ${syntheticProposalId}`, 'PromotionsController_create');
-
-  // List proposals
-  const listProps = await request('GET', '/api/v1/promotion-proposals', { token: instructorToken });
-  recordTest(14, 'List promotion proposals GET /promotion-proposals', 200, listProps.status,
-    listProps.status === 200 && Array.isArray(listProps.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Proposals total: ${listProps.json?.data?.total}`, 'PromotionsController_list');
-
-  // Author edits note
-  const editProp = await request('PATCH', `/api/v1/promotion-proposals/${syntheticProposalId}`, {
-    token: instructorToken,
-    body: { note: 'Dedicated student, excellent kata performance' }
-  });
-  recordTest(14, 'Author edits proposal note PATCH /promotion-proposals/:id', 200, editProp.status,
-    editProp.status === 200 ? 'PASS' : 'FAIL', 'Note updated', 'PromotionsController_updateNote');
-
-  // Master / Admin approves proposal (ReviewProposalDto: note)
-  const reviewProp = await request('POST', `/api/v1/promotion-proposals/${syntheticProposalId}/review`, {
-    token: adminToken,
-    body: { status: 'APPROVED', note: 'Agreed. Ready for next exam session.' }
-  });
-  recordTest(14, 'Master approves proposal POST /promotion-proposals/:id/review', 200, reviewProp.status,
-    reviewProp.status === 200 && reviewProp.json?.data?.status === 'APPROVED' ? 'PASS' : 'FAIL',
-    'Proposal APPROVED', 'PromotionsController_review');
-
-  // INVARIANT CHECK: Approval MUST NOT move the current belt rank!
-  const stuAfterProp = await request('GET', '/api/v1/students/me', { token: studentToken });
-  const rankUnmoved = stuAfterProp.json?.data?.currentBeltRankId === stuCurrentRank;
-  recordTest(14, 'CRITICAL INVARIANT: Proposal approval DID NOT move current belt rank', stuCurrentRank, stuAfterProp.json?.data?.currentBeltRankId,
-    rankUnmoved ? 'PASS' : 'FAIL', 'Advisory proposal verified: Belt unchanged');
-
-  // Duplicate open proposal conflicts
-  const prop2 = await request('POST', '/api/v1/promotion-proposals', {
-    token: instructorToken,
-    body: { studentId: demoStudentProfileId, proposedRankId: propRankId, note: 'Second proposal' }
-  });
-  const dupProp = await request('POST', '/api/v1/promotion-proposals', {
-    token: instructorToken,
-    body: { studentId: demoStudentProfileId, proposedRankId: propRankId, note: 'Duplicate open proposal' }
-  });
-  recordTest(14, 'Second open proposal conflicts 409', 409, dupProp.status,
-    dupProp.status === 409 ? 'PASS' : 'FAIL', 'UQ open proposal constraint verified');
-
-  // Clean up prop2 by closing it so subsequent runs stay clean
-  if (prop2.json?.data?.id) {
-    await request('POST', `/api/v1/promotion-proposals/${prop2.json.data.id}/review`, {
-      token: adminToken,
-      body: { status: 'REJECTED', note: 'Closed duplicate proposal test' }
-    });
-  }
-
-  // =================================================================
-  // PHASE 15 — EVALUATIONS
-  // =================================================================
-  console.log(`\n--- PHASE 15: EVALUATIONS ---`);
-
-  // Instructor evaluates own student (CreateEvaluationDto: periodMonth, periodYear, rating, comment)
-  const createEval = await request('POST', '/api/v1/evaluations', {
-    token: instructorToken,
-    body: {
-      studentId: demoStudentProfileId,
-      classId: basicClassId,
-      periodMonth: 10,
-      periodYear: 2026,
-      rating: 9,
-      comment: 'Good focus and progress in forms'
-    }
-  });
-  syntheticEvalId = createEval.json?.data?.id;
-  recordTest(15, 'Instructor creates evaluation POST /evaluations', 201, createEval.status,
-    createEval.status === 201 && !!syntheticEvalId ? 'PASS' : 'FAIL',
-    `Eval ID: ${syntheticEvalId}`, 'EvaluationsController_create');
-
-  // List evaluations for student
-  const listEvals = await request('GET', `/api/v1/evaluations?studentId=${demoStudentProfileId}`, { token: studentToken });
-  recordTest(15, 'List evaluations for student GET /evaluations', 200, listEvals.status,
-    listEvals.status === 200 && Array.isArray(listEvals.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Evaluations count: ${listEvals.json?.data?.total}`, 'EvaluationsController_listForStudent');
-
-  // Author updates evaluation
-  const updateEval = await request('PATCH', `/api/v1/evaluations/${syntheticEvalId}`, {
-    token: instructorToken,
-    body: { comment: 'Updated feedback: Outstanding dedication' }
-  });
-  recordTest(15, 'Author updates evaluation PATCH /evaluations/:id', 200, updateEval.status,
-    updateEval.status === 200 ? 'PASS' : 'FAIL', 'Comment updated', 'EvaluationsController_update');
-
-  // Non-author update attempt is 404
-  const nonAuthorUpdate = await request('PATCH', `/api/v1/evaluations/${syntheticEvalId}`, {
-    token: instr2Token,
-    body: { comment: 'Hacked by instr2' }
-  });
-  recordTest(15, 'Non-author instructor update rejected 404', 404, nonAuthorUpdate.status,
-    nonAuthorUpdate.status === 404 ? 'PASS' : 'FAIL', 'Author isolation verified');
-
-  // Author deletes evaluation
-  const delEval = await request('DELETE', `/api/v1/evaluations/${syntheticEvalId}`, { token: instructorToken });
-  recordTest(15, 'Author deletes evaluation DELETE /evaluations/:id', 200, delEval.status,
-    delEval.status === 200 ? 'PASS' : 'FAIL', 'Evaluation deleted', 'EvaluationsController_delete');
-
-  // Unknown classId returns 404 (not a 500)
-  const unknownClsEval = await request('POST', '/api/v1/evaluations', {
-    token: instructorToken,
-    body: {
-      studentId: demoStudentProfileId,
-      classId: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
-      periodMonth: 12,
-      periodYear: 2026,
-      rating: 7
-    }
-  });
-  recordTest(15, 'Unknown classId returns 404 not 500', 404, unknownClsEval.status,
-    unknownClsEval.status === 404 ? 'PASS' : 'FAIL', 'Uniform 404 on unknown parent resource');
-
-  // =================================================================
-  // PHASE 16 — DISCOUNTS / SETTINGS
-  // =================================================================
-  console.log(`\n--- PHASE 16: DISCOUNTS / SETTINGS ---`);
-
-  // Admin creates discount code
-  const discountCodeStr = `UAT${Date.now().toString().slice(-6)}`;
-  const createDisc = await request('POST', '/api/v1/discounts', {
-    token: adminToken,
-    body: {
-      code: discountCodeStr,
-      percentOff: 15,
-      description: '15% UAT discount',
-      validFrom: '2026-09-01T00:00:00.000Z',
-      validUntil: '2026-12-31T23:59:59.000Z'
-    }
-  });
-  syntheticDiscountId = createDisc.json?.data?.id;
-  recordTest(16, 'Admin creates discount code POST /discounts', 201, createDisc.status,
-    createDisc.status === 201 && !!syntheticDiscountId ? 'PASS' : 'FAIL',
-    `Code: ${discountCodeStr}, ID: ${syntheticDiscountId}`, 'BillingController_createDiscount');
-
-  // List discounts
-  const listDiscs = await request('GET', '/api/v1/discounts', { token: adminToken });
-  recordTest(16, 'List discounts GET /discounts', 200, listDiscs.status,
-    listDiscs.status === 200 && Array.isArray(listDiscs.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Discounts count: ${listDiscs.json?.data?.total}`, 'BillingController_listDiscounts');
-
-  // Update discount code
-  const updateDisc = await request('PATCH', `/api/v1/discounts/${syntheticDiscountId}`, {
-    token: adminToken,
-    body: { description: 'Updated discount description', isActive: false }
-  });
-  recordTest(16, 'Update discount code PATCH /discounts/:id', 200, updateDisc.status,
-    updateDisc.status === 200 && updateDisc.json?.data?.isActive === false ? 'PASS' : 'FAIL',
-    'Discount deactivated', 'BillingController_updateDiscount');
-
-  // Invalid XOR state (both percentOff and amountOff specified -> 400)
-  const invalidXorDisc = await request('POST', '/api/v1/discounts', {
-    token: adminToken,
-    body: {
-      code: `XOR${Date.now().toString().slice(-4)}`,
-      percentOff: 10,
-      amountOff: 50000,
-      validFrom: '2026-09-01T00:00:00.000Z',
-      validUntil: '2026-12-31T23:59:59.000Z'
-    }
-  });
-  recordTest(16, 'Invalid XOR discount state rejected 400', 400, invalidXorDisc.status,
-    invalidXorDisc.status === 400 ? 'PASS' : 'FAIL', 'Cannot specify both percentOff and amountOff');
-
-  // Delete discount code
-  const delDisc = await request('DELETE', `/api/v1/discounts/${syntheticDiscountId}`, { token: adminToken });
-  recordTest(16, 'Delete discount code DELETE /discounts/:id', 200, delDisc.status,
-    delDisc.status === 200 ? 'PASS' : 'FAIL', 'Discount deleted', 'BillingController_deleteDiscount');
-
-  // =================================================================
-  // PHASE 17 — USERS / ADMIN
-  // =================================================================
-  console.log(`\n--- PHASE 17: USERS / ADMIN ---`);
-
-  // List users
-  const listUsers = await request('GET', '/api/v1/users', { token: adminToken });
-  recordTest(17, 'Admin lists users GET /users', 200, listUsers.status,
-    listUsers.status === 200 && Array.isArray(listUsers.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Total users: ${listUsers.json?.data?.total}`, 'AdminUsersController_list');
-
-  // Create user
-  const newAdminUser = await request('POST', '/api/v1/users', {
-    token: adminToken,
-    body: {
-      email: `live-uat-user-${Date.now()}@example.com`,
-      password: 'UatUser#2026',
-      role: 'INSTRUCTOR',
-      fullName: 'Synthetic User'
-    }
-  });
-  syntheticUserId = newAdminUser.json?.data?.id;
-  recordTest(17, 'Admin creates user POST /users', 201, newAdminUser.status,
-    newAdminUser.status === 201 && !!syntheticUserId ? 'PASS' : 'FAIL',
-    `User ID: ${syntheticUserId}`, 'AdminUsersController_create');
-
-  // Update user role & password reset
-  const updateUser = await request('PATCH', `/api/v1/users/${syntheticUserId}`, {
-    token: adminToken,
-    body: { role: 'STUDENT', newPassword: 'NewUserPass#2026' }
-  });
-  recordTest(17, 'Admin updates user role PATCH /users/:id', 200, updateUser.status,
-    updateUser.status === 200 && updateUser.json?.data?.role === 'STUDENT' ? 'PASS' : 'FAIL',
-    'Role changed to STUDENT', 'AdminUsersController_update');
-
-  // Deactivate user
-  const deactUser = await request('DELETE', `/api/v1/users/${syntheticUserId}`, { token: adminToken });
-  recordTest(17, 'Admin deactivates user DELETE /users/:id', 200, deactUser.status,
-    deactUser.status === 200 ? 'PASS' : 'FAIL', 'User deactivated', 'AdminUsersController_deactivate');
-
-  // Self-deactivation prevention (Admin cannot deactivate self)
-  const selfDeact = await request('DELETE', `/api/v1/users/${adminUserId}`, { token: adminToken });
-  recordTest(17, 'Admin self-deactivation rejected 400', 400, selfDeact.status,
-    selfDeact.status === 400 ? 'PASS' : 'FAIL', 'Self-lockout prevented');
-
-  // Admin audit log
-  const adminAudit = await request('GET', '/api/v1/admin/audit-log', { token: adminToken });
-  recordTest(17, 'Admin audit log GET /admin/audit-log', 200, adminAudit.status,
-    adminAudit.status === 200 && Array.isArray(adminAudit.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Audit total: ${adminAudit.json?.data?.total}`, 'AdminUsersController_auditLog');
-
-  // =================================================================
-  // PHASE 18 — CONSENT / NOTIFICATIONS
-  // =================================================================
-  console.log(`\n--- PHASE 18: CONSENT / NOTIFICATIONS ---`);
-
-  // Student grants consent
-  const grantConsent = await request('POST', '/api/v1/consent', {
-    token: studentToken,
-    body: { purpose: 'MEDIA_USAGE' }
-  });
-  recordTest(18, 'Student grants consent POST /consent', 201, grantConsent.status,
-    grantConsent.status === 201 ? 'PASS' : 'FAIL', 'Consent granted', 'ConsentController_grant');
-
-  // Re-granting is idempotent
-  const regrantConsent = await request('POST', '/api/v1/consent', {
-    token: studentToken,
-    body: { purpose: 'MEDIA_USAGE' }
-  });
-  recordTest(18, 'Consent grant is idempotent', 201, regrantConsent.status,
-    regrantConsent.status === 201 ? 'PASS' : 'FAIL', 'Idempotent 201');
-
-  // Consent history
-  const consentHist = await request('GET', '/api/v1/consent/me', { token: studentToken });
-  recordTest(18, 'Consent history GET /consent/me', 200, consentHist.status,
-    consentHist.status === 200 && Array.isArray(consentHist.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Active consents: ${consentHist.json?.data?.items?.length}`, 'ConsentController_history');
-
-  // Revoke consent
-  const revokeConsent = await request('POST', '/api/v1/consent/revoke', {
-    token: studentToken,
-    body: { purpose: 'MEDIA_USAGE' }
-  });
-  recordTest(18, 'Revoke consent POST /consent/revoke', 200, revokeConsent.status,
-    revokeConsent.status === 200 ? 'PASS' : 'FAIL', 'Consent revoked', 'ConsentController_revoke');
-
-  // Notifications feed
-  const notifFeed = await request('GET', '/api/v1/notifications/me', { token: studentToken });
-  recordTest(18, 'Notifications feed GET /notifications/me', 200, notifFeed.status,
-    notifFeed.status === 200 && Array.isArray(notifFeed.json?.data?.items) ? 'PASS' : 'FAIL',
-    `Notifications: ${notifFeed.json?.data?.total}`, 'NotificationsController_feed');
-
-  // Mark notification read
-  const firstNotif = notifFeed.json?.data?.items?.[0];
-  if (firstNotif) {
-    const markRead = await request('PATCH', `/api/v1/notifications/${firstNotif.id}/read`, { token: studentToken });
-    recordTest(18, 'Mark notification read PATCH /notifications/:id/read', 200, markRead.status,
-      markRead.status === 200 ? 'PASS' : 'FAIL', 'Marked read', 'NotificationsController_markRead');
-  } else {
-    const foreignNotif = await request('PATCH', '/api/v1/notifications/ffffffff-ffff-ffff-ffff-ffffffffffff/read', {
-      token: studentToken
-    });
-    recordTest(18, 'Mark foreign notification read is uniform 404', 404, foreignNotif.status,
-      foreignNotif.status === 404 ? 'PASS' : 'FAIL', 'Uniform 404 anti-probing', 'NotificationsController_markRead');
-  }
-
-  // Admin flushes outbox
-  const flushNotif = await request('POST', '/api/v1/admin/notifications/flush', { token: adminToken });
-  recordTest(18, 'Admin flushes notifications outbox POST /admin/notifications/flush', 200, flushNotif.status,
-    flushNotif.status === 200 ? 'PASS' : 'FAIL',
-    `Flushed: ${flushNotif.json?.data?.flushed}`, 'NotificationsController_flush');
-
-  // =================================================================
-  // PHASE 19 — REPORTS
-  // =================================================================
-  console.log(`\n--- PHASE 19: REPORTS ---`);
-
-  const repAtt = await request('GET', '/api/v1/admin/reports/attendance?month=2026-09', { token: adminToken });
-  const repBelts = await request('GET', '/api/v1/admin/reports/belts', { token: adminToken });
-  const repTui = await request('GET', '/api/v1/admin/reports/tuition?month=9&year=2026', { token: adminToken });
-  const repRev = await request('GET', '/api/v1/admin/reports/revenue?from=2026-09-01&to=2026-09-30', { token: adminToken });
-  const allReportsOk = repAtt.status === 200 && repBelts.status === 200 && repTui.status === 200 && repRev.status === 200;
-  recordTest(19, 'All 4 Reporting endpoints verified with filters', 'All 200',
-    allReportsOk ? 'All 200' : 'Failure', allReportsOk ? 'PASS' : 'FAIL',
-    'Attendance, Belts, Tuition, Revenue reports verified');
-
-  // Student forbidden on admin reports
-  const stuRevForbidden = await request('GET', '/api/v1/admin/reports/revenue?from=2026-09-01&to=2026-09-30', { token: studentToken });
-  recordTest(19, 'Student forbidden on financial reports (403)', 403, stuRevForbidden.status,
-    stuRevForbidden.status === 403 ? 'PASS' : 'FAIL', 'Financial report isolation');
-
-  // =================================================================
-  // PHASE 20 — SECURITY BLACK-BOX PASS
-  // =================================================================
-  console.log(`\n--- PHASE 20: SECURITY BLACK-BOX PASS ---`);
-
-  // Malformed UUID path parameter
-  const malformedUuid = await request('GET', '/api/v1/students/not-a-valid-uuid-format', { token: adminToken });
-  recordTest(20, 'Malformed UUID path parameter -> 400 (ParseUuidPipe)', 400, malformedUuid.status,
-    malformedUuid.status === 400 ? 'PASS' : 'FAIL', 'ParseUuidPipe rejects bad UUID format');
-
-  // Unknown body field rejected (whitelist validation)
-  const unknownField = await request('POST', '/api/v1/classes', {
-    token: adminToken,
-    body: { name: 'Test Class', capacity: 10, instructorId: instructorUserId, hackerField: 'malicious' }
-  });
-  recordTest(20, 'Unknown body field rejected -> 400 (Global Whitelist)', 400, unknownField.status,
-    unknownField.status === 400 ? 'PASS' : 'FAIL', 'Global whitelist validation rejects extra fields');
-
-  // Invalid enum rejected
-  const invalidEnum = await request('POST', '/api/v1/students', {
-    token: adminToken,
-    body: { fullName: 'Enum Tester', dob: '2005-01-01', gender: 'SUPERHUMAN' }
-  });
-  recordTest(20, 'Invalid enum rejected -> 400', 400, invalidEnum.status,
-    invalidEnum.status === 400 ? 'PASS' : 'FAIL', 'Enum validation active');
-
-  // Oversized payload
-  const oversizedPayload = 'A'.repeat(500000);
-  const oversizedRes = await request('POST', '/api/v1/classes', {
-    token: adminToken,
-    body: { name: oversizedPayload, instructorId: instructorUserId }
-  });
-  recordTest(20, 'Oversized payload rejected cleanly', '400 or 413', oversizedRes.status,
-    (oversizedRes.status === 400 || oversizedRes.status === 413) ? 'PASS' : 'FAIL',
-    'Body parser or validation cleanly rejected payload without 500');
-
-  // No secrets or stack trace leak inspection across all test responses
-  let leakFound = false;
-  let leakDetail = '';
-  for (const r of testResults) {
-    const raw = typeof r.actual === 'string' ? r.actual : (JSON.stringify(r.actual) ?? '');
-    if (raw && (raw.includes('DATABASE_URL') || raw.includes('JWT_SECRET') || raw.includes('passwordHash') || raw.includes('PrismaClientKnownRequestError'))) {
-      leakFound = true;
-      leakDetail = `Leak in test: ${r.name}`;
-      break;
+    } catch {
+      errors++;
     }
   }
-  recordTest(20, 'Leak scan across all responses (no secrets/passwords/stack traces)', 'Clean',
-    leakFound ? 'LEAK DETECTED' : 'Clean', !leakFound ? 'PASS' : 'FAIL', leakDetail || '0 leaks detected');
 
-  // =================================================================
-  // PHASE 21 — API CONTRACT / OPENAPI RECONCILIATION
-  // =================================================================
-  console.log(`\n--- PHASE 21: OPENAPI CONTRACT RECONCILIATION ---`);
-  let coveredCount = 0;
-  for (const [opId, op] of operationCoverage.entries()) {
-    if (op.covered) {
-      coveredCount++;
-    } else {
-      console.log(`  [UNCOVERED] ${op.method} ${op.path} (${opId})`);
+  // 6. Remove synthetic enrollments
+  for (const enrId of Array.from(createdResources.enrollments)) {
+    try {
+      const res = await request('DELETE', `/api/v1/enrollments/${enrId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.enrollments.delete(enrId);
+    } catch {
+      errors++;
     }
   }
-  recordTest(21, `OpenAPI 111 operations coverage accounting`, 111, coveredCount,
-    coveredCount === 111 ? 'PASS' : 'FAIL',
-    `Accounted: ${coveredCount}/111 operations`);
 
-  // =================================================================
-  // PHASE 22 — RATE LIMIT / OPERATIONAL SAFETY
-  // =================================================================
-  console.log(`\n--- PHASE 22: RATE LIMIT / OPERATIONAL SAFETY ---`);
-  // Small polite burst of 8 rapid requests on login endpoint
-  let burst429Seen = false;
-  const burstPromises = [];
-  for (let i = 0; i < 8; i++) {
-    burstPromises.push(fetch(`${BASE_URL}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: `burst-test-${i}@example.com`, password: 'WrongPassword#123' })
-    }));
-  }
-  const burstResults = await Promise.all(burstPromises);
-  const burstStatuses = burstResults.map(r => r.status);
-  burst429Seen = burstStatuses.includes(429);
-  recordTest(22, 'Auth IP rate limit responds without crashing server', 'Handled (401 or 429)',
-    `Statuses: ${burstStatuses.slice(0, 4).join(', ')}...`, 'PASS',
-    `Auth rate limit layer active. 429 observed: ${burst429Seen}`);
-
-  // Re-verify healthz after burst
-  const postBurstHealth = await request('GET', '/healthz');
-  recordTest(22, 'Server health preserved post-rate-limit verification', 200, postBurstHealth.status,
-    postBurstHealth.status === 200 ? 'PASS' : 'FAIL', 'Healthz=200 post-burst');
-
-  // =================================================================
-  // COMPILE FINAL REPORT & METRICS
-  // =================================================================
-  console.log(`\n=======================================================`);
-  console.log(`UAT EXECUTION COMPLETED`);
-  console.log(`=======================================================`);
-
-  let passCount = 0, failCount = 0, blockedCount = 0, manualCount = 0;
-  for (const t of testResults) {
-    if (t.result === 'PASS') passCount++;
-    else if (t.result === 'FAIL') failCount++;
-    else if (t.result.includes('BLOCKED')) blockedCount++;
-    else if (t.result.includes('MANUAL')) manualCount++;
+  // 7. Soft-delete synthetic students
+  for (const stuId of Array.from(createdResources.students)) {
+    try {
+      const res = await request('DELETE', `/api/v1/students/${stuId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.students.delete(stuId);
+    } catch {
+      errors++;
+    }
   }
 
-  console.log(`TOTAL TESTS: ${testResults.length}`);
-  console.log(`PASS: ${passCount}`);
-  console.log(`FAIL: ${failCount}`);
-  console.log(`BLOCKED: ${blockedCount}`);
-  console.log(`MANUAL_REQUIRED: ${manualCount}`);
-  console.log(`OPERATIONS COVERAGE: ${coveredCount}/111`);
+  // 8. Deactivate synthetic users
+  for (const usrId of Array.from(createdResources.users)) {
+    try {
+      const res = await request('DELETE', `/api/v1/users/${usrId}`, { token: adminToken });
+      if (res.status === 200 || res.status === 404) createdResources.users.delete(usrId);
+    } catch {
+      errors++;
+    }
+  }
 
-  // Write results JSON to disk for documentation generation
-  fs.writeFileSync('test/uat/live-uat-results.json', JSON.stringify({
+  // Preserved by design: financial records (invoices, payments) are historical and never hard-deleted.
+  if (createdResources.invoices.size > 0 || createdResources.payments.size > 0) {
+    console.log(
+      `[FINANCIAL INTEGRITY] Synthetic financial residue preserved: ${createdResources.invoices.size} invoices, ${createdResources.payments.size} payments.`,
+    );
+  }
+
+  cleanupStatus = errors === 0 ? 'CLEANUP COMPLETED' : 'CLEANUP PARTIAL';
+  console.log(`[CLEANUP] Status: ${cleanupStatus}`);
+
+  // Always write results JSON upon exit
+  writeResultsJson();
+}
+
+function writeResultsJson() {
+  const coverage = calculateCoverageSummary(operationCoverage);
+  const outPath = 'test/uat/live-uat-results.json';
+  const data = {
     runId: RUN_ID,
     timestamp: new Date().toISOString(),
     baseUrl: BASE_URL,
+    runStatus,
+    cleanupStatus,
     totalTests: testResults.length,
-    passCount,
-    failCount,
-    blockedCount,
-    manualCount,
-    coveredCount,
+    passCount: coverage.pass,
+    failCount: coverage.fail,
+    blockedCount: coverage.blocked,
+    manualCount: coverage.manualRequired,
+    notSafeCount: coverage.notSafeToAutomate,
+    coveredCount: coverage.coveredCount,
+    totalOperations: coverage.total,
+    executedOperations: coverage.executed,
+    financialResidue: {
+      invoices: Array.from(createdResources.invoices),
+      payments: Array.from(createdResources.payments),
+    },
+    createdResourcesSummary: {
+      users: Array.from(createdResources.users),
+      students: Array.from(createdResources.students),
+      classes: Array.from(createdResources.classes),
+      schedules: Array.from(createdResources.schedules),
+      enrollments: Array.from(createdResources.enrollments),
+      attendanceSessions: Array.from(createdResources.attendanceSessions),
+      beltRanks: Array.from(createdResources.beltRanks),
+      exams: Array.from(createdResources.exams),
+      registrations: Array.from(createdResources.registrations),
+      invoices: Array.from(createdResources.invoices),
+      payments: Array.from(createdResources.payments),
+      announcements: Array.from(createdResources.announcements),
+      leaves: Array.from(createdResources.leaves),
+      evaluations: Array.from(createdResources.evaluations),
+      proposals: Array.from(createdResources.proposals),
+      discounts: Array.from(createdResources.discounts),
+    },
+    leakScan: {
+      scannedCount: leakScanResults.scannedCount,
+      leaksDetected: leakScanResults.leaks.length,
+      leaks: leakScanResults.leaks,
+    },
     testResults,
-    operations: Array.from(operationCoverage.values())
-  }, null, 2));
+    operations: Array.from(operationCoverage.values()),
+  };
 
-  console.log(`Results written to test/uat/live-uat-results.json`);
+  try {
+    fs.writeFileSync(outPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`[REPORT] Wrote live UAT results to ${outPath}`);
+  } catch (err) {
+    console.error(`[REPORT ERROR] Failed to write results JSON:`, err.message);
+  }
 }
 
-run().catch(err => {
-  console.error('FATAL RUN ERROR:', err);
+// Process signal handlers
+process.on('SIGINT', async () => {
+  console.log('\n[SIGNAL] Received SIGINT. Terminating run gracefully...');
+  runStatus = 'RUN ABORTED';
+  await performGuaranteedCleanup('SIGINT');
+  process.exit(130);
 });
+
+process.on('SIGTERM', async () => {
+  console.log('\n[SIGNAL] Received SIGTERM. Terminating run gracefully...');
+  runStatus = 'RUN ABORTED';
+  await performGuaranteedCleanup('SIGTERM');
+  process.exit(143);
+});
+
+// =====================================================================
+// MAIN RUNNER
+// =====================================================================
+async function run() {
+  console.log(`=======================================================`);
+  console.log(`VOVINAM API NODE — LIVE RENDER UAT REPAIRED RUNNER`);
+  console.log(`TARGET: ${BASE_URL}`);
+  console.log(`RUN ID: ${RUN_ID}`);
+  console.log(`TIMESTAMP: ${new Date().toISOString()}`);
+  console.log(`=======================================================\n`);
+
+  try {
+    // -----------------------------------------------------------------
+    // PHASE 0 — LIVE PRE-FLIGHT
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 0: LIVE PRE-FLIGHT ---`);
+
+    // 1. GET /healthz
+    const healthz = await request('GET', '/healthz');
+    const healthzOk = healthz.status === 200 && healthz.json?.data?.status === 'ok';
+    recordTest(
+      0,
+      'GET /healthz liveness probe',
+      200,
+      healthz.status,
+      healthzOk ? 'PASS' : 'FAIL',
+      `Latency: ${healthz.latency}ms`,
+      'HealthController_getLiveness',
+      true,
+    );
+
+    // 2. GET /readyz
+    const readyz = await request('GET', '/readyz');
+    const readyzOk =
+      readyz.status === 200 && readyz.json?.data?.status === 'ok' && readyz.json?.data?.database === 'up';
+    recordTest(
+      0,
+      'GET /readyz readiness probe',
+      200,
+      readyz.status,
+      readyzOk ? 'PASS' : 'FAIL',
+      `Latency: ${readyz.latency}ms, DB: ${readyz.json?.data?.database}`,
+      'HealthController_getReadiness',
+      true,
+    );
+
+    if (!readyzOk) {
+      console.error('FATAL: readyz failed. STOPPING execution per Phase 0 contract.');
+      runStatus = 'RUN ABORTED';
+      return;
+    }
+
+    // 3. GET /metrics without token -> 401
+    const metricsNoToken = await request('GET', '/metrics');
+    recordTest(
+      0,
+      'GET /metrics without token returns 401',
+      401,
+      metricsNoToken.status,
+      metricsNoToken.status === 401 ? 'PASS' : 'FAIL',
+      'Protected metrics endpoint requires bearer token',
+      'MetricsController_getMetrics',
+      true,
+    );
+
+    // 4. GET /docs (Phase 8 fail-closed assertion)
+    const docs = await request('GET', '/docs');
+    const docsResult = evaluateDocsAssertion(docs.status);
+    recordTest(
+      0,
+      'GET /docs live documentation endpoint',
+      200,
+      docs.status,
+      docsResult,
+      docsResult === 'PASS'
+        ? 'Swagger UI served (Staging/Integration environment posture)'
+        : `Unexpected /docs status ${docs.status}`,
+    );
+
+    // 5. GET /docs-json (Phase 8 fail-closed assertion)
+    const docsJson = await request('GET', '/docs-json');
+    const docsJsonResult = evaluateDocsAssertion(docsJson.status);
+    recordTest(
+      0,
+      'GET /docs-json live OpenAPI document',
+      200,
+      docsJson.status,
+      docsJsonResult,
+      docsJsonResult === 'PASS'
+        ? `OpenAPI document served, paths: ${Object.keys(docsJson.json?.paths || {}).length}`
+        : `Unexpected /docs-json status ${docsJson.status}`,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 1 — AUTH BOOTSTRAP (Runtime Credentials Only)
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 1: ADMIN BOOTSTRAP ---`);
+    adminToken = await getBootstrapAdminToken();
+
+    // Dynamically retrieve operator admin user ID via /auth/me (NO hardcoded UUIDs!)
+    const adminMe = await request('GET', '/api/v1/auth/me', { token: adminToken });
+    if (adminMe.status === 200 && adminMe.json?.data?.id) {
+      adminUserId = adminMe.json.data.id;
+      console.log(`[BOOT] Bootstrap operator authenticated: ID ${adminUserId}`);
+    } else {
+      throw new Error(`Failed to retrieve bootstrap operator identity via /auth/me`);
+    }
+
+    // -----------------------------------------------------------------
+    // PHASE 2 & 3 — BUILD COMPLETE SYNTHETIC ACTOR GRAPH
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 2 & 3: SYNTHETIC ACTOR GRAPH SETUP ---`);
+
+    // 1. Instructor A
+    const instrAEmail = `live-uat-instr-a-${RUN_ID}@example.com`;
+    const instrACreate = await request('POST', '/api/v1/users', {
+      token: adminToken,
+      body: { email: instrAEmail, password: ACTOR_PASSWORD, role: 'INSTRUCTOR' },
+    });
+    instructorAUserId = instrACreate.json?.data?.id;
+    registerCreatedResource('users', instructorAUserId);
+    recordTest(
+      2,
+      'Create synthetic Instructor A user',
+      201,
+      instrACreate.status,
+      instrACreate.status === 201 ? 'PASS' : 'FAIL',
+      `Instructor A ID: ${instructorAUserId}`,
+      'AdminUsersController_create',
+      true,
+    );
+
+    const instrALogin = await request('POST', '/api/v1/auth/login', {
+      body: { email: instrAEmail, password: ACTOR_PASSWORD },
+    });
+    instructorAToken = instrALogin.json?.data?.tokens?.accessToken;
+    recordTest(
+      2,
+      'Login synthetic Instructor A',
+      200,
+      instrALogin.status,
+      instrALogin.status === 200 && !!instructorAToken ? 'PASS' : 'FAIL',
+      'Instructor A session established',
+      'AuthController_login',
+      true,
+    );
+
+    // 2. Instructor B (Foreign instructor for IDOR / cross-instructor authorization tests)
+    const instrBEmail = `live-uat-instr-b-${RUN_ID}@example.com`;
+    const instrBCreate = await request('POST', '/api/v1/users', {
+      token: adminToken,
+      body: { email: instrBEmail, password: ACTOR_PASSWORD, role: 'INSTRUCTOR' },
+    });
+    instructorBUserId = instrBCreate.json?.data?.id;
+    registerCreatedResource('users', instructorBUserId);
+    recordTest(
+      2,
+      'Create synthetic Instructor B user (for foreign authorization tests)',
+      201,
+      instrBCreate.status,
+      instrBCreate.status === 201 ? 'PASS' : 'FAIL',
+      `Instructor B ID: ${instructorBUserId}`,
+    );
+
+    const instrBLogin = await request('POST', '/api/v1/auth/login', {
+      body: { email: instrBEmail, password: ACTOR_PASSWORD },
+    });
+    instructorBToken = instrBLogin.json?.data?.tokens?.accessToken;
+
+    // 3. Student A (User + Linked Profile)
+    const studentAEmail = `live-uat-student-a-${RUN_ID}@example.com`;
+    const studentACreate = await request('POST', '/api/v1/users', {
+      token: adminToken,
+      body: { email: studentAEmail, password: ACTOR_PASSWORD, role: 'STUDENT' },
+    });
+    studentAUserId = studentACreate.json?.data?.id;
+    registerCreatedResource('users', studentAUserId);
+
+    const studentALogin = await request('POST', '/api/v1/auth/login', {
+      body: { email: studentAEmail, password: ACTOR_PASSWORD },
+    });
+    studentAToken = studentALogin.json?.data?.tokens?.accessToken;
+    const studentARefresh = studentALogin.json?.data?.tokens?.refreshToken;
+
+    const studentAProfileCreate = await request('POST', '/api/v1/students', {
+      token: adminToken,
+      body: {
+        fullName: `UAT Student A ${RUN_ID.slice(0, 6)}`,
+        dob: '2005-06-15',
+        gender: 'MALE',
+        phone: '+84901111111',
+        address: '123 Synthetic Street, District 1',
+        linkedUserEmail: studentAEmail,
+      },
+    });
+    studentAProfileId = studentAProfileCreate.json?.data?.id;
+    registerCreatedResource('students', studentAProfileId);
+    recordTest(
+      2,
+      'Create synthetic Student A profile with linked account',
+      201,
+      studentAProfileCreate.status,
+      studentAProfileCreate.status === 201 && !!studentAProfileId ? 'PASS' : 'FAIL',
+      `Student A Profile ID: ${studentAProfileId}`,
+      'StudentsController_create',
+      true,
+    );
+
+    // 4. Student B (Foreign student for IDOR tests)
+    const studentBEmail = `live-uat-student-b-${RUN_ID}@example.com`;
+    const studentBCreate = await request('POST', '/api/v1/users', {
+      token: adminToken,
+      body: { email: studentBEmail, password: ACTOR_PASSWORD, role: 'STUDENT' },
+    });
+    studentBUserId = studentBCreate.json?.data?.id;
+    registerCreatedResource('users', studentBUserId);
+
+    const studentBLogin = await request('POST', '/api/v1/auth/login', {
+      body: { email: studentBEmail, password: ACTOR_PASSWORD },
+    });
+    studentBToken = studentBLogin.json?.data?.tokens?.accessToken;
+
+    const studentBProfileCreate = await request('POST', '/api/v1/students', {
+      token: adminToken,
+      body: {
+        fullName: `UAT Student B ${RUN_ID.slice(0, 6)}`,
+        dob: '2006-07-20',
+        gender: 'FEMALE',
+        phone: '+84902222222',
+        address: '456 Synthetic Avenue, District 3',
+        linkedUserEmail: studentBEmail,
+      },
+    });
+    studentBProfileId = studentBProfileCreate.json?.data?.id;
+    registerCreatedResource('students', studentBProfileId);
+
+    // 5. Parent User & Unlinked Minor Child
+    const parentEmail = `live-uat-parent-${RUN_ID}@example.com`;
+    const parentCreate = await request('POST', '/api/v1/users', {
+      token: adminToken,
+      body: { email: parentEmail, password: ACTOR_PASSWORD, role: 'PARENT' },
+    });
+    parentUserId = parentCreate.json?.data?.id;
+    registerCreatedResource('users', parentUserId);
+
+    const parentLogin = await request('POST', '/api/v1/auth/login', {
+      body: { email: parentEmail, password: ACTOR_PASSWORD },
+    });
+    parentToken = parentLogin.json?.data?.tokens?.accessToken;
+
+    const childCreate = await request('POST', '/api/v1/students', {
+      token: adminToken,
+      body: {
+        fullName: `UAT Child ${RUN_ID.slice(0, 6)}`,
+        dob: '2016-08-10',
+        gender: 'MALE',
+        emergencyContactName: 'UAT Parent',
+        emergencyContactPhone: '+84909999999',
+      },
+    });
+    childStudentProfileId = childCreate.json?.data?.id;
+    registerCreatedResource('students', childStudentProfileId);
+
+    // 6. Class A (taught by Instructor A) & Class B (taught by Instructor B)
+    const classACreate = await request('POST', '/api/v1/classes', {
+      token: adminToken,
+      body: { name: `UAT Class A ${RUN_ID.slice(0, 6)}`, instructorId: instructorAUserId, capacity: 25 },
+    });
+    classAId = classACreate.json?.data?.id;
+    registerCreatedResource('classes', classAId);
+    recordTest(
+      2,
+      'Create synthetic Class A (taught by Instructor A)',
+      201,
+      classACreate.status,
+      classACreate.status === 201 && !!classAId ? 'PASS' : 'FAIL',
+      `Class A ID: ${classAId}`,
+      'ClassesController_create',
+      true,
+    );
+
+    const classBCreate = await request('POST', '/api/v1/classes', {
+      token: adminToken,
+      body: { name: `UAT Class B ${RUN_ID.slice(0, 6)}`, instructorId: instructorBUserId, capacity: 25 },
+    });
+    classBId = classBCreate.json?.data?.id;
+    registerCreatedResource('classes', classBId);
+
+    // 7. Schedule for Class A
+    const schedCreate = await request('POST', `/api/v1/classes/${classAId}/schedules`, {
+      token: adminToken,
+      body: { dayOfWeek: 2, startTime: '18:00', endTime: '19:30' },
+    });
+    scheduleAId = schedCreate.json?.data?.id;
+    registerCreatedResource('schedules', scheduleAId);
+    recordTest(
+      2,
+      'Create schedule for synthetic Class A',
+      201,
+      schedCreate.status,
+      schedCreate.status === 201 && !!scheduleAId ? 'PASS' : 'FAIL',
+      `Schedule ID: ${scheduleAId}`,
+      'ClassesController_addSchedule',
+      true,
+    );
+
+    // 8. Enroll Student A in Class A
+    const enrCreate = await request('POST', `/api/v1/classes/${classAId}/enrollments`, {
+      token: adminToken,
+      body: { studentId: studentAProfileId },
+    });
+    enrollmentAId = enrCreate.json?.data?.id;
+    registerCreatedResource('enrollments', enrollmentAId);
+    recordTest(
+      2,
+      'Enroll synthetic Student A into Class A',
+      201,
+      enrCreate.status,
+      enrCreate.status === 201 && !!enrollmentAId ? 'PASS' : 'FAIL',
+      `Enrollment ID: ${enrollmentAId}`,
+      'EnrollmentsController_create',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 4 — AUTH & SESSION LIFECYCLE
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 4: AUTH & SESSION LIFECYCLE ---`);
+
+    // Student calls /auth/me
+    const meRes = await request('GET', '/api/v1/auth/me', { token: studentAToken });
+    recordTest(
+      4,
+      'Student GET /auth/me',
+      200,
+      meRes.status,
+      meRes.status === 200 && meRes.json?.data?.role === 'STUDENT' ? 'PASS' : 'FAIL',
+      `Role verified: ${meRes.json?.data?.role}`,
+      'AuthController_me',
+      true,
+    );
+
+    // Student sessions list
+    const sessionsRes = await request('GET', '/api/v1/auth/sessions', { token: studentAToken });
+    recordTest(
+      4,
+      'Student GET /auth/sessions',
+      200,
+      sessionsRes.status,
+      sessionsRes.status === 200 && Array.isArray(sessionsRes.json?.data) ? 'PASS' : 'FAIL',
+      `Active sessions: ${sessionsRes.json?.data?.length}`,
+      'AuthController_sessions',
+      true,
+    );
+
+    // Refresh token rotation
+    if (studentARefresh) {
+      const refreshRes = await request('POST', '/api/v1/auth/refresh', {
+        body: { refreshToken: studentARefresh },
+      });
+      const refreshOk = refreshRes.status === 200 && !!refreshRes.json?.data?.tokens?.accessToken;
+      if (refreshOk) {
+        studentAToken = refreshRes.json.data.tokens.accessToken;
+      }
+      recordTest(
+        4,
+        'Rotate refresh token POST /auth/refresh',
+        200,
+        refreshRes.status,
+        refreshOk ? 'PASS' : 'FAIL',
+        'Acquired rotated token set',
+        'AuthController_refreshToken',
+        true,
+      );
+    }
+
+    // Change password request on synthetic student
+    const changePwdRes = await request('POST', '/api/v1/auth/change-password', {
+      token: studentAToken,
+      body: { currentPassword: ACTOR_PASSWORD, newPassword: `${ACTOR_PASSWORD}#new` },
+    });
+    recordTest(
+      4,
+      'Change password POST /auth/change-password',
+      200,
+      changePwdRes.status,
+      changePwdRes.status === 200 ? 'PASS' : 'FAIL',
+      'Password changed on synthetic student',
+      'AuthController_changePassword',
+      true,
+    );
+
+    // Change email request on synthetic student (does not mutate demo accounts!)
+    const changeEmailReq = await request('POST', '/api/v1/auth/change-email/request', {
+      token: studentAToken,
+      body: { newEmail: `student-a-new-${RUN_ID}@example.com`, password: `${ACTOR_PASSWORD}#new` },
+    });
+    recordTest(
+      4,
+      'Request change email POST /auth/change-email/request',
+      200,
+      changeEmailReq.status,
+      changeEmailReq.status === 200 ? 'PASS' : 'FAIL',
+      'Change email request issued for synthetic account',
+      'AuthController_requestChangeEmail',
+      true,
+    );
+
+    // Confirm change email with bad token -> 400
+    const confirmEmailBad = await request('POST', '/api/v1/auth/change-email/confirm', {
+      body: { token: 'invalid-change-email-token-garbage' },
+    });
+    recordTest(
+      4,
+      'Confirm change email with invalid token returns 400',
+      400,
+      confirmEmailBad.status,
+      confirmEmailBad.status === 400 ? 'PASS' : 'FAIL',
+      'Clean validation rejection',
+      'AuthController_confirmChangeEmail',
+      true,
+    );
+
+    // Student audit log GET /auth/audit-log
+    const studentAudit = await request('GET', '/api/v1/auth/audit-log', { token: studentAToken });
+    recordTest(
+      4,
+      'Student views own audit log GET /auth/audit-log',
+      200,
+      studentAudit.status,
+      studentAudit.status === 200 && Array.isArray(studentAudit.json?.data) ? 'PASS' : 'FAIL',
+      `Audit entries: ${studentAudit.json?.data?.length}`,
+      'AuthController_auditLog',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 5 — STUDENTS & OWNERSHIP SCOPING
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 5: STUDENTS & OWNERSHIP SCOPING ---`);
+
+    // Student A reads own profile via /students/me
+    const studentAMe = await request('GET', '/api/v1/students/me', { token: studentAToken });
+    recordTest(
+      5,
+      'Student reads own profile GET /students/me',
+      200,
+      studentAMe.status,
+      studentAMe.status === 200 && studentAMe.json?.data?.id === studentAProfileId ? 'PASS' : 'FAIL',
+      `Profile ID verified: ${studentAProfileId}`,
+      'StudentsController_me',
+      true,
+    );
+
+    // Student A edits own contact fields via PATCH /students/me (strictly mutates synthetic student!)
+    const editSelf = await request('PATCH', '/api/v1/students/me', {
+      token: studentAToken,
+      body: { phone: '+84903333333', address: '789 Updated UAT Street' },
+    });
+    recordTest(
+      5,
+      'Student edits own allowed contact fields PATCH /students/me',
+      200,
+      editSelf.status,
+      editSelf.status === 200 && editSelf.json?.data?.phone === '+84903333333' ? 'PASS' : 'FAIL',
+      'Synthetic student profile updated',
+      'StudentsController_updateOwn',
+      true,
+    );
+
+    // Student A attempting to access Student B profile -> 404 uniform anti-probing
+    const idorStudent = await request('GET', `/api/v1/students/${studentBProfileId}`, {
+      token: studentAToken,
+    });
+    recordTest(
+      5,
+      'Foreign student profile probe answers uniform 404 (IDOR guard)',
+      404,
+      idorStudent.status,
+      idorStudent.status === 404 ? 'PASS' : 'FAIL',
+      'Ownership guard 7.3 uniform 404 enforced',
+    );
+
+    // Admin lists students
+    const listStudents = await request('GET', '/api/v1/students?limit=10', { token: adminToken });
+    recordTest(
+      5,
+      'Admin lists students GET /students',
+      200,
+      listStudents.status,
+      listStudents.status === 200 && Array.isArray(listStudents.json?.data?.items) ? 'PASS' : 'FAIL',
+      `Total items: ${listStudents.json?.data?.total}`,
+      'StudentsController_list',
+      true,
+    );
+
+    // Admin updates synthetic Student A
+    const adminUpdateStu = await request('PATCH', `/api/v1/students/${studentAProfileId}`, {
+      token: adminToken,
+      body: { medicalNotes: 'No allergies recorded during UAT pass' },
+    });
+    recordTest(
+      5,
+      'Admin updates student PATCH /students/:id',
+      200,
+      adminUpdateStu.status,
+      adminUpdateStu.status === 200 ? 'PASS' : 'FAIL',
+      'Medical notes updated',
+      'StudentsController_update',
+      true,
+    );
+
+    // Admin regenerates invite code for child student profile
+    const regenCode = await request('POST', `/api/v1/students/${childStudentProfileId}/invite-code`, {
+      token: adminToken,
+    });
+    const inviteCode = regenCode.json?.data?.inviteCode;
+    recordTest(
+      5,
+      'Admin regenerates invite code POST /students/:id/invite-code',
+      200,
+      regenCode.status,
+      regenCode.status === 200 && !!inviteCode ? 'PASS' : 'FAIL',
+      'Single-use invite code generated',
+      'StudentsController_regenerateInviteCode',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 6 — PARENTS & PROXY ACCESS
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 6: PARENTS & PROXY ACCESS ---`);
+
+    // Parent links to child using invite code
+    if (inviteCode) {
+      const linkChild = await request('POST', '/api/v1/parents/link', {
+        token: parentToken,
+        body: { inviteCode },
+      });
+      recordTest(
+        6,
+        'Parent links child using invite code POST /parents/link',
+        201,
+        linkChild.status,
+        linkChild.status === 201 ? 'PASS' : 'FAIL',
+        'Verified link created for synthetic child',
+        'ParentsController_linkChild',
+        true,
+      );
+    }
+
+    // Parent views linked children
+    const myChildren = await request('GET', '/api/v1/parents/children', { token: parentToken });
+    recordTest(
+      6,
+      'Parent views linked children GET /parents/children',
+      200,
+      myChildren.status,
+      myChildren.status === 200 && Array.isArray(myChildren.json?.data) ? 'PASS' : 'FAIL',
+      `Children count: ${myChildren.json?.data?.length}`,
+      'ParentsController_myChildren',
+      true,
+    );
+
+    // Parent attempting to read unlinked Student A -> 404
+    const parentUnlinked = await request('GET', `/api/v1/students/${studentAProfileId}`, {
+      token: parentToken,
+    });
+    recordTest(
+      6,
+      'Parent unlinked student access answers uniform 404',
+      404,
+      parentUnlinked.status,
+      parentUnlinked.status === 404 ? 'PASS' : 'FAIL',
+      'Parent ownership scoping enforced',
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 7 — CLASSES, SCHEDULES & ENROLLMENT
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 7: CLASSES, SCHEDULES & ENROLLMENT ---`);
+
+    // List classes
+    const listClasses = await request('GET', '/api/v1/classes', { token: instructorAToken });
+    recordTest(
+      7,
+      'Instructor lists classes GET /classes',
+      200,
+      listClasses.status,
+      listClasses.status === 200 && Array.isArray(listClasses.json?.data) ? 'PASS' : 'FAIL',
+      `Classes count: ${listClasses.json?.data?.length}`,
+      'ClassesController_list',
+      true,
+    );
+
+    // Get Class A by ID
+    const getCls = await request('GET', `/api/v1/classes/${classAId}`, { token: studentAToken });
+    recordTest(
+      7,
+      'Get class details GET /classes/:id',
+      200,
+      getCls.status,
+      getCls.status === 200 && getCls.json?.data?.id === classAId ? 'PASS' : 'FAIL',
+      'Class details retrieved',
+      'ClassesController_getById',
+      true,
+    );
+
+    // Admin updates Class A
+    const updateCls = await request('PATCH', `/api/v1/classes/${classAId}`, {
+      token: adminToken,
+      body: { capacity: 30 },
+    });
+    recordTest(
+      7,
+      'Admin updates class PATCH /classes/:id',
+      200,
+      updateCls.status,
+      updateCls.status === 200 ? 'PASS' : 'FAIL',
+      'Class capacity updated to 30',
+      'ClassesController_update',
+      true,
+    );
+
+    // List enrollments for Class A
+    const listEnr = await request('GET', `/api/v1/classes/${classAId}/enrollments`, {
+      token: instructorAToken,
+    });
+    recordTest(
+      7,
+      'List class enrollments GET /classes/:id/enrollments',
+      200,
+      listEnr.status,
+      listEnr.status === 200 && Array.isArray(listEnr.json?.data) ? 'PASS' : 'FAIL',
+      `Enrollments: ${listEnr.json?.data?.length}`,
+      'EnrollmentsController_list',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 8 — ATTENDANCE
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 8: ATTENDANCE ---`);
+
+    const sessionDate = new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 10);
+
+    // Instructor A creates attendance session for Class A
+    const createSession = await request('POST', '/api/v1/attendance-sessions', {
+      token: instructorAToken,
+      body: { classId: classAId, sessionDate, topic: 'Basic Stances & Strikes' },
+    });
+    attendanceSessionAId = createSession.json?.data?.id;
+    if (attendanceSessionAId) {
+      registerCreatedResource('attendanceSessions', attendanceSessionAId);
+    }
+    recordTest(
+      8,
+      'Instructor creates attendance session POST /attendance-sessions',
+      201,
+      createSession.status,
+      createSession.status === 201 && !!attendanceSessionAId ? 'PASS' : 'FAIL',
+      `Session ID: ${attendanceSessionAId}`,
+      'AttendanceController_createSession',
+      true,
+    );
+
+    // Instructor B (foreign instructor) cannot create session for Class A -> 404
+    const foreignAtt = await request('POST', '/api/v1/attendance-sessions', {
+      token: instructorBToken,
+      body: { classId: classAId, sessionDate: '2026-10-01' },
+    });
+    recordTest(
+      8,
+      'Foreign instructor creating attendance session returns uniform 404',
+      404,
+      foreignAtt.status,
+      foreignAtt.status === 404 ? 'PASS' : 'FAIL',
+      'Instructor class-scoping enforced',
+    );
+
+    // Bulk upsert records for synthetic Student A in session A
+    if (attendanceSessionAId) {
+      const upsertRec = await request(
+        'POST',
+        `/api/v1/attendance-sessions/${attendanceSessionAId}/records`,
+        {
+          token: instructorAToken,
+          body: {
+            records: [{ studentId: studentAProfileId, status: 'PRESENT', note: 'UAT verified' }],
+          },
+        },
+      );
+      recordTest(
+        8,
+        'Bulk upsert attendance records POST /attendance-sessions/:id/records',
+        200,
+        upsertRec.status,
+        upsertRec.status === 200 ? 'PASS' : 'FAIL',
+        'Upserted record for synthetic student',
+        'AttendanceController_upsertRecords',
+        true,
+      );
+
+      const listRecs = await request(
+        'GET',
+        `/api/v1/attendance-sessions/${attendanceSessionAId}/records`,
+        {
+          token: instructorAToken,
+        },
+      );
+      recordTest(
+        8,
+        'List attendance records GET /attendance-sessions/:id/records',
+        200,
+        listRecs.status,
+        listRecs.status === 200 ? 'PASS' : 'FAIL',
+        `Records count: ${listRecs.json?.data?.length}`,
+        'AttendanceController_listRecords',
+        true,
+      );
+    } else {
+      // If session creation failed, DO NOT pretend it was covered!
+      recordTest(
+        8,
+        'Attendance records upsert skipped (session creation failed)',
+        200,
+        0,
+        'BLOCKED',
+        'Attendance session could not be created; skipping records test',
+        'AttendanceController_upsertRecords',
+        false,
+      );
+      recordTest(
+        8,
+        'Attendance records listing skipped (session creation failed)',
+        200,
+        0,
+        'BLOCKED',
+        'Attendance session could not be created; skipping records list',
+        'AttendanceController_listRecords',
+        false,
+      );
+    }
+
+    // Student attendance history
+    const stuAttHistory = await request(
+      'GET',
+      `/api/v1/students/${studentAProfileId}/attendance`,
+      {
+        token: studentAToken,
+      },
+    );
+    recordTest(
+      8,
+      'Student attendance history GET /students/:id/attendance',
+      200,
+      stuAttHistory.status,
+      stuAttHistory.status === 200 && Array.isArray(stuAttHistory.json?.data?.items) ? 'PASS' : 'FAIL',
+      `History records: ${stuAttHistory.json?.data?.items?.length}`,
+      'AttendanceController_history',
+      true,
+    );
+
+    // Attendance summary
+    const attSummary = await request(
+      'GET',
+      `/api/v1/attendance/summary?studentId=${studentAProfileId}&month=2026-10`,
+      {
+        token: studentAToken,
+      },
+    );
+    recordTest(
+      8,
+      'Attendance summary GET /attendance/summary',
+      200,
+      attSummary.status,
+      attSummary.status === 200 ? 'PASS' : 'FAIL',
+      'Attendance summary retrieved',
+      'AttendanceController_summary',
+      true,
+    );
+
+    // Monthly attendance report (Admin)
+    const attMonthly = await request('GET', `/api/v1/admin/reports/attendance?month=2026-10`, {
+      token: adminToken,
+    });
+    recordTest(
+      8,
+      'Attendance monthly report GET /admin/reports/attendance',
+      200,
+      attMonthly.status,
+      attMonthly.status === 200 && Array.isArray(attMonthly.json?.data) ? 'PASS' : 'FAIL',
+      `Classes reported: ${attMonthly.json?.data?.length}`,
+      'AttendanceController_monthlyReport',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 9 — BELTS & EXAMS
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 9: BELTS & EXAMS ---`);
+
+    // Belt ranks list
+    const beltRanks = await request('GET', '/api/v1/belt-ranks', { token: studentAToken });
+    recordTest(
+      9,
+      'Belt ranks catalog GET /belt-ranks',
+      200,
+      beltRanks.status,
+      beltRanks.status === 200 && Array.isArray(beltRanks.json?.data) ? 'PASS' : 'FAIL',
+      `Ranks catalog: ${beltRanks.json?.data?.length} ranks`,
+      'BeltsController_list',
+      true,
+    );
+
+    // Belt distribution report (Admin)
+    const beltDist = await request('GET', '/api/v1/admin/reports/belts', { token: adminToken });
+    recordTest(
+      9,
+      'Belt distribution report GET /admin/reports/belts',
+      200,
+      beltDist.status,
+      beltDist.status === 200 && Array.isArray(beltDist.json?.data) ? 'PASS' : 'FAIL',
+      'Belt distribution report generated',
+      'BeltReportsController_distribution',
+      true,
+    );
+
+    // Admin creates synthetic belt rank
+    const uniqueOrder = Math.floor(10000 + Math.random() * 80000);
+    const newRankCode = `T_${RUN_ID.slice(0, 4)}_${uniqueOrder % 1000}`;
+    const createRank = await request('POST', '/api/v1/belt-ranks', {
+      token: adminToken,
+      body: { code: newRankCode, name: `Test Rank ${newRankCode}`, rankGroup: 'LAM', orderIndex: uniqueOrder },
+    });
+    testBeltRankId = createRank.json?.data?.id;
+    if (testBeltRankId) {
+      registerCreatedResource('beltRanks', String(testBeltRankId));
+    }
+    recordTest(
+      9,
+      'Admin creates synthetic belt rank POST /belt-ranks',
+      201,
+      createRank.status,
+      createRank.status === 201 && !!testBeltRankId ? 'PASS' : 'FAIL',
+      `Rank ID: ${testBeltRankId}`,
+      'BeltsController_create',
+      true,
+    );
+
+    // Admin updates ONLY the newly created synthetic belt rank (NEVER fallback to catalog rank 1!)
+    if (testBeltRankId) {
+      const updateRank = await request('PATCH', `/api/v1/belt-ranks/${testBeltRankId}`, {
+        token: adminToken,
+        body: { name: `Test Rank Updated ${newRankCode}` },
+      });
+      recordTest(
+        9,
+        'Admin updates synthetic belt rank PATCH /belt-ranks/:id',
+        200,
+        updateRank.status,
+        updateRank.status === 200 ? 'PASS' : 'FAIL',
+        'Updated synthetic rank name',
+        'BeltsController_update',
+        true,
+      );
+    }
+
+    // Admin creates belt exam
+    const examDate = new Date(Date.now() + 86400000 * 14).toISOString().slice(0, 10);
+    const regClose = new Date(Date.now() + 86400000 * 7).toISOString();
+    const createExam = await request('POST', '/api/v1/belt-exams', {
+      token: adminToken,
+      body: {
+        title: `UAT Exam ${RUN_ID.slice(0, 6)}`,
+        examDate,
+        registrationClosesAt: regClose,
+        feeAmount: 150000,
+      },
+    });
+    examAId = createExam.json?.data?.id;
+    if (examAId) {
+      registerCreatedResource('exams', examAId);
+    }
+    recordTest(
+      9,
+      'Admin creates belt exam POST /belt-exams',
+      201,
+      createExam.status,
+      createExam.status === 201 && !!examAId ? 'PASS' : 'FAIL',
+      `Exam ID: ${examAId}`,
+      'ExamsController_create',
+      true,
+    );
+
+    // List belt exams
+    const listExams = await request('GET', '/api/v1/belt-exams', { token: studentAToken });
+    recordTest(
+      9,
+      'List belt exams GET /belt-exams',
+      200,
+      listExams.status,
+      listExams.status === 200 && Array.isArray(listExams.json?.data) ? 'PASS' : 'FAIL',
+      `Exams count: ${listExams.json?.data?.length}`,
+      'ExamsController_list',
+      true,
+    );
+
+    // Get exam by ID
+    if (examAId) {
+      const getExam = await request('GET', `/api/v1/belt-exams/${examAId}`, { token: studentAToken });
+      recordTest(
+        9,
+        'Get exam details GET /belt-exams/:id',
+        200,
+        getExam.status,
+        getExam.status === 200 && getExam.json?.data?.id === examAId ? 'PASS' : 'FAIL',
+        'Exam details retrieved',
+        'ExamsController_getById',
+        true,
+      );
+
+      // Admin updates exam
+      const updateExam = await request('PATCH', `/api/v1/belt-exams/${examAId}`, {
+        token: adminToken,
+        body: { title: `UAT Exam Updated ${RUN_ID.slice(0, 6)}` },
+      });
+      recordTest(
+        9,
+        'Admin updates exam PATCH /belt-exams/:id',
+        200,
+        updateExam.status,
+        updateExam.status === 200 ? 'PASS' : 'FAIL',
+        'Exam title updated',
+        'ExamsController_update',
+        true,
+      );
+
+      // Student A registers for exam (strictly targets synthetic Student A!)
+      const registerExam = await request('POST', `/api/v1/belt-exams/${examAId}/register`, {
+        token: studentAToken,
+        body: { studentId: studentAProfileId },
+      });
+      examRegistrationAId = registerExam.json?.data?.id;
+      if (examRegistrationAId) {
+        registerCreatedResource('registrations', examRegistrationAId);
+        // Note: exam registration atomically creates an exam fee invoice
+        const examInvId = registerExam.json?.data?.invoice?.id;
+        if (examInvId) {
+          registerCreatedResource('invoices', examInvId);
+          syntheticFinancialResidue.invoices.push(examInvId);
+        }
+      }
+      recordTest(
+        9,
+        'Student registers for exam POST /belt-exams/:id/register',
+        201,
+        registerExam.status,
+        registerExam.status === 201 && !!examRegistrationAId ? 'PASS' : 'FAIL',
+        `Registration ID: ${examRegistrationAId}`,
+        'ExamsController_register',
+        true,
+      );
+
+      // List student registrations
+      const listRegs = await request(
+        'GET',
+        `/api/v1/exam-registrations?studentId=${studentAProfileId}`,
+        {
+          token: studentAToken,
+        },
+      );
+      recordTest(
+        9,
+        'List student exam registrations GET /exam-registrations',
+        200,
+        listRegs.status,
+        listRegs.status === 200 && Array.isArray(listRegs.json?.data) ? 'PASS' : 'FAIL',
+        `Registrations: ${listRegs.json?.data?.length}`,
+        'ExamsController_listStudentRegistrations',
+        true,
+      );
+
+      // Instructor records exam result (PASS promotes synthetic student A)
+      if (examRegistrationAId && testBeltRankId) {
+        const recordResult = await request(
+          'POST',
+          `/api/v1/exam-registrations/${examRegistrationAId}/result`,
+          {
+            token: instructorAToken,
+            body: { status: 'RESULT_PASS', newBeltRankId: testBeltRankId, score: 8.5 },
+          },
+        );
+        recordTest(
+          9,
+          'Instructor records exam result PASS POST /exam-registrations/:id/result',
+          200,
+          recordResult.status,
+          recordResult.status === 200 ? 'PASS' : 'FAIL',
+          'Promoted synthetic student A',
+          'ExamsController_recordResult',
+          true,
+        );
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // PHASE 10 — BILLING & FINANCIAL SAFETY (F4 & F5)
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 10: BILLING & FINANCIAL SAFETY ---`);
+
+    // GET billing settings (Read-only verification; safe on live)
+    const billSettings = await request('GET', '/api/v1/admin/billing/settings', {
+      token: adminToken,
+    });
+    recordTest(
+      10,
+      'Get billing settings GET /admin/billing/settings',
+      200,
+      billSettings.status,
+      billSettings.status === 200 ? 'PASS' : 'FAIL',
+      'Billing settings retrieved read-only',
+      'BillingController_getSettings',
+      true,
+    );
+
+    // MUTATING GLOBAL SETTINGS IS STRICTLY FORBIDDEN ON LIVE (F4)
+    recordTest(
+      10,
+      'PUT /admin/billing/settings/tuition-rates mutation skipped on live',
+      'Protected global state preserved',
+      'Skipped for live safety',
+      'NOT_SAFE_TO_AUTOMATE',
+      'Global tuition rates must not be mutated on live Render deployment per Phase 4 contract.',
+      'BillingController_updateTuitionRates',
+      false,
+    );
+
+    recordTest(
+      10,
+      'PUT /admin/billing/settings/bank-account mutation skipped on live',
+      'Protected global state preserved',
+      'Skipped for live safety',
+      'NOT_SAFE_TO_AUTOMATE',
+      'Global bank account settings must not be mutated on live Render deployment per Phase 4 contract.',
+      'BillingController_updateBankAccount',
+      false,
+    );
+
+    // Create synthetic discount code
+    const discountCodeName = `UAT${RUN_ID.slice(0, 4).toUpperCase()}`;
+    const createDiscount = await request('POST', '/api/v1/discounts', {
+      token: adminToken,
+      body: {
+        code: discountCodeName,
+        discountType: 'FIXED',
+        amount: 25000,
+        validUntil: new Date(Date.now() + 86400000 * 30).toISOString(),
+      },
+    });
+    manualDiscountId = createDiscount.json?.data?.id;
+    if (manualDiscountId) {
+      registerCreatedResource('discounts', manualDiscountId);
+    }
+    recordTest(
+      10,
+      'Admin creates discount code POST /discounts',
+      201,
+      createDiscount.status,
+      createDiscount.status === 201 && !!manualDiscountId ? 'PASS' : 'FAIL',
+      `Discount Code: ${discountCodeName}`,
+      'BillingController_createDiscount',
+      true,
+    );
+
+    // List discounts
+    const listDiscounts = await request('GET', '/api/v1/discounts', { token: adminToken });
+    recordTest(
+      10,
+      'List discounts GET /discounts',
+      200,
+      listDiscounts.status,
+      listDiscounts.status === 200 && Array.isArray(listDiscounts.json?.data) ? 'PASS' : 'FAIL',
+      `Discounts count: ${listDiscounts.json?.data?.length}`,
+      'BillingController_listDiscounts',
+      true,
+    );
+
+    // Update discount
+    if (manualDiscountId) {
+      const updateDisc = await request('PATCH', `/api/v1/discounts/${manualDiscountId}`, {
+        token: adminToken,
+        body: { amount: 30000 },
+      });
+      recordTest(
+        10,
+        'Admin updates discount PATCH /discounts/:id',
+        200,
+        updateDisc.status,
+        updateDisc.status === 200 ? 'PASS' : 'FAIL',
+        'Discount amount updated to 30,000 VND',
+        'BillingController_updateDiscount',
+        true,
+      );
+    }
+
+    // Admin creates manual invoice for synthetic Student A (F5 safe)
+    const createInv = await request('POST', '/api/v1/invoices', {
+      token: adminToken,
+      body: {
+        studentId: studentAProfileId,
+        type: 'OTHER',
+        items: [{ description: 'Vovinam Uniform Size 4', quantity: 1, unitAmount: 350000 }],
+        discountCode: discountCodeName,
+        note: `UAT manual invoice ${RUN_ID}`,
+      },
+    });
+    manualInvoiceId = createInv.json?.data?.id;
+    if (manualInvoiceId) {
+      registerCreatedResource('invoices', manualInvoiceId);
+      syntheticFinancialResidue.invoices.push(manualInvoiceId);
+    }
+    recordTest(
+      10,
+      'Admin creates invoice for synthetic student POST /invoices',
+      201,
+      createInv.status,
+      createInv.status === 201 && !!manualInvoiceId ? 'PASS' : 'FAIL',
+      `Invoice ID: ${manualInvoiceId}`,
+      'BillingController_create',
+      true,
+    );
+
+    // List invoices
+    const listInv = await request('GET', '/api/v1/invoices', { token: adminToken });
+    recordTest(
+      10,
+      'List invoices GET /invoices',
+      200,
+      listInv.status,
+      listInv.status === 200 && Array.isArray(listInv.json?.data?.items) ? 'PASS' : 'FAIL',
+      `Invoices count: ${listInv.json?.data?.total}`,
+      'BillingController_list',
+      true,
+    );
+
+    // Get invoice by ID
+    if (manualInvoiceId) {
+      const getInv = await request('GET', `/api/v1/invoices/${manualInvoiceId}`, {
+        token: studentAToken,
+      });
+      recordTest(
+        10,
+        'Get invoice details GET /invoices/:id',
+        200,
+        getInv.status,
+        getInv.status === 200 && getInv.json?.data?.id === manualInvoiceId ? 'PASS' : 'FAIL',
+        'Invoice retrieved',
+        'BillingController_getById',
+        true,
+      );
+    }
+
+    // Generate monthly tuition for ONLY synthetic Class A (no pre-existing enrollments touched)
+    const genMonthly = await request('POST', '/api/v1/admin/billing/generate-monthly', {
+      token: adminToken,
+      body: { month: 11, year: 2026, classIds: [classAId] },
+    });
+    recordTest(
+      10,
+      'Generate monthly tuition scoped to synthetic class POST /admin/billing/generate-monthly',
+      200,
+      genMonthly.status,
+      genMonthly.status === 200 ? 'PASS' : 'FAIL',
+      `Generated: ${genMonthly.json?.data?.generated ?? 0}, Skipped: ${genMonthly.json?.data?.skippedExisting ?? 0}`,
+      'BillingController_generateMonthly',
+      true,
+    );
+
+    // Billing reports
+    const revReport = await request('GET', '/api/v1/admin/reports/revenue?from=2026-09-01&to=2026-10-31', {
+      token: adminToken,
+    });
+    recordTest(
+      10,
+      'Revenue report GET /admin/reports/revenue',
+      200,
+      revReport.status,
+      revReport.status === 200 ? 'PASS' : 'FAIL',
+      'Revenue report retrieved',
+      'BillingController_revenue',
+      true,
+    );
+
+    const tuiReport = await request('GET', '/api/v1/admin/reports/tuition?month=10&year=2026', {
+      token: adminToken,
+    });
+    recordTest(
+      10,
+      'Tuition report GET /admin/reports/tuition',
+      200,
+      tuiReport.status,
+      tuiReport.status === 200 ? 'PASS' : 'FAIL',
+      'Tuition report retrieved',
+      'BillingController_tuitionReport',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 11 — PAYMENTS (SIMULATED GATEWAY POSTURE)
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 11: PAYMENTS (SIMULATED POSTURE) ---`);
+
+    // Create QR payment for synthetic invoice
+    let paymentTxnId = '';
+    if (manualInvoiceId) {
+      const qrRes = await request('POST', `/api/v1/payments/qr/${manualInvoiceId}`, {
+        token: studentAToken,
+      });
+      const orderRef = qrRes.json?.data?.orderRef;
+      recordTest(
+        11,
+        'Create QR payment POST /payments/qr/:invoiceId',
+        201,
+        qrRes.status,
+        qrRes.status === 201 && !!orderRef ? 'PASS' : 'FAIL',
+        `Order Ref: ${orderRef}`,
+        'PaymentsController_createQrPayment',
+        true,
+      );
+
+      // Confirm cash payment (Admin confirms payment on synthetic invoice)
+      const cashRes = await request('POST', `/api/v1/payments/${manualInvoiceId}/confirm-cash`, {
+        token: adminToken,
+        body: { note: 'UAT cash confirmation' },
+      });
+      paymentTxnId = cashRes.json?.data?.payment?.id;
+      if (paymentTxnId) {
+        registerCreatedResource('payments', paymentTxnId);
+        syntheticFinancialResidue.payments.push(paymentTxnId);
+      }
+      recordTest(
+        11,
+        'Confirm cash payment POST /payments/:invoiceId/confirm-cash',
+        200,
+        cashRes.status,
+        cashRes.status === 200 && !!paymentTxnId ? 'PASS' : 'FAIL',
+        `Payment Transaction ID: ${paymentTxnId}`,
+        'PaymentsController_confirmCash',
+        true,
+      );
+
+      // Duplicate payment attempt rejected (409)
+      const dupCash = await request('POST', `/api/v1/payments/${manualInvoiceId}/confirm-cash`, {
+        token: adminToken,
+        body: { note: 'Duplicate cash attempt' },
+      });
+      recordTest(
+        11,
+        'Duplicate cash confirmation rejected 409',
+        409,
+        dupCash.status,
+        dupCash.status === 409 ? 'PASS' : 'FAIL',
+        'Invoice already paid rejection verified',
+      );
+
+      // List payments for invoice
+      const listPayments = await request('GET', `/api/v1/payments?invoiceId=${manualInvoiceId}`, {
+        token: studentAToken,
+      });
+      recordTest(
+        11,
+        'List payments for invoice GET /payments?invoiceId=:id',
+        200,
+        listPayments.status,
+        listPayments.status === 200 && Array.isArray(listPayments.json?.data) ? 'PASS' : 'FAIL',
+        `Payments found: ${listPayments.json?.data?.length}`,
+        'PaymentsController_listForInvoice',
+        true,
+      );
+
+      // Set outcome / Refund payment (Admin refunds the synthetic transaction)
+      if (paymentTxnId) {
+        const refundRes = await request('PATCH', `/api/v1/payments/${paymentTxnId}`, {
+          token: adminToken,
+          body: { status: 'REFUNDED', note: 'UAT payment refund verification' },
+        });
+        recordTest(
+          11,
+          'Refund payment transaction PATCH /payments/:id',
+          200,
+          refundRes.status,
+          refundRes.status === 200 ? 'PASS' : 'FAIL',
+          'Transaction status set to REFUNDED',
+          'PaymentsController_setOutcome',
+          true,
+        );
+      }
+    }
+
+    // Real payment provider webhook callback: classified BLOCKED per Phase 5 & 12
+    recordTest(
+      11,
+      'Real payment gateway provider webhook callback',
+      'External provider HMAC webhook',
+      'Simulated gateway active',
+      'BLOCKED',
+      'Render integration environment runs PAYMENTS_GATEWAY=simulated. External provider callbacks intentionally not triggered on live to protect real funds.',
+      'PaymentsController_webhook',
+      false,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 12 — ANNOUNCEMENTS
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 12: ANNOUNCEMENTS ---`);
+
+    // Instructor A creates class-scoped announcement for Class A
+    const createAnn = await request('POST', '/api/v1/announcements', {
+      token: instructorAToken,
+      body: {
+        title: `UAT Announcement ${RUN_ID.slice(0, 6)}`,
+        content: 'Please arrive 10 minutes early for warmups.',
+        targetAudience: 'CLASS',
+        classId: classAId,
+      },
+    });
+    announcementId = createAnn.json?.data?.id;
+    if (announcementId) {
+      registerCreatedResource('announcements', announcementId);
+    }
+    recordTest(
+      12,
+      'Instructor creates announcement POST /announcements',
+      201,
+      createAnn.status,
+      createAnn.status === 201 && !!announcementId ? 'PASS' : 'FAIL',
+      `Announcement ID: ${announcementId}`,
+      'AnnouncementsController_create',
+      true,
+    );
+
+    // List announcements
+    const listAnn = await request('GET', '/api/v1/announcements', { token: studentAToken });
+    recordTest(
+      12,
+      'List announcements GET /announcements',
+      200,
+      listAnn.status,
+      listAnn.status === 200 && Array.isArray(listAnn.json?.data) ? 'PASS' : 'FAIL',
+      `Announcements count: ${listAnn.json?.data?.length}`,
+      'AnnouncementsController_list',
+      true,
+    );
+
+    // Update announcement
+    if (announcementId) {
+      const updateAnn = await request('PATCH', `/api/v1/announcements/${announcementId}`, {
+        token: instructorAToken,
+        body: { title: `UAT Announcement Updated ${RUN_ID.slice(0, 6)}` },
+      });
+      recordTest(
+        12,
+        'Instructor updates announcement PATCH /announcements/:id',
+        200,
+        updateAnn.status,
+        updateAnn.status === 200 ? 'PASS' : 'FAIL',
+        'Announcement updated',
+        'AnnouncementsController_update',
+        true,
+      );
+    }
+
+    // -----------------------------------------------------------------
+    // PHASE 13 — LEAVE REQUESTS
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 13: LEAVE REQUESTS ---`);
+
+    const leaveDate = new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10);
+
+    // Student A submits leave request for Class A
+    const createLeave = await request('POST', '/api/v1/leave-requests', {
+      token: studentAToken,
+      body: {
+        studentId: studentAProfileId,
+        classId: classAId,
+        startDate: leaveDate,
+        endDate: leaveDate,
+        reason: 'School exam conflict',
+      },
+    });
+    leaveRequestId = createLeave.json?.data?.id;
+    if (leaveRequestId) {
+      registerCreatedResource('leaves', leaveRequestId);
+    }
+    recordTest(
+      13,
+      'Student submits leave request POST /leave-requests',
+      201,
+      createLeave.status,
+      createLeave.status === 201 && !!leaveRequestId ? 'PASS' : 'FAIL',
+      `Leave Request ID: ${leaveRequestId}`,
+      'LeavesController_create',
+      true,
+    );
+
+    // List leave requests
+    const listLeaves = await request('GET', '/api/v1/leave-requests', { token: instructorAToken });
+    recordTest(
+      13,
+      'Instructor lists leave requests GET /leave-requests',
+      200,
+      listLeaves.status,
+      listLeaves.status === 200 && Array.isArray(listLeaves.json?.data) ? 'PASS' : 'FAIL',
+      `Leave requests count: ${listLeaves.json?.data?.length}`,
+      'LeavesController_list',
+      true,
+    );
+
+    // Instructor A reviews leave request (APPROVED)
+    if (leaveRequestId) {
+      const reviewLeave = await request('POST', `/api/v1/leave-requests/${leaveRequestId}/review`, {
+        token: instructorAToken,
+        body: { status: 'APPROVED', comment: 'Approved for school exams' },
+      });
+      recordTest(
+        13,
+        'Instructor reviews leave request POST /leave-requests/:id/review',
+        200,
+        reviewLeave.status,
+        reviewLeave.status === 200 ? 'PASS' : 'FAIL',
+        'Leave request APPROVED',
+        'LeavesController_review',
+        true,
+      );
+
+      // Student cancel endpoint (tested on a second synthetic leave)
+      const leaveDate2 = new Date(Date.now() + 86400000 * 6).toISOString().slice(0, 10);
+      const leave2 = await request('POST', '/api/v1/leave-requests', {
+        token: studentAToken,
+        body: {
+          studentId: studentAProfileId,
+          classId: classAId,
+          startDate: leaveDate2,
+          endDate: leaveDate2,
+          reason: 'Family event',
+        },
+      });
+      const leave2Id = leave2.json?.data?.id;
+      if (leave2Id) {
+        registerCreatedResource('leaves', leave2Id);
+        const cancelLeave = await request('POST', `/api/v1/leave-requests/${leave2Id}/cancel`, {
+          token: studentAToken,
+        });
+        recordTest(
+          13,
+          'Student cancels own leave request POST /leave-requests/:id/cancel',
+          200,
+          cancelLeave.status,
+          cancelLeave.status === 200 ? 'PASS' : 'FAIL',
+          'Leave request cancelled',
+          'LeavesController_cancel',
+          true,
+        );
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // PHASE 14 — PROMOTION PROPOSALS
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 14: PROMOTION PROPOSALS ---`);
+
+    // Instructor A creates promotion proposal for Student A
+    const createProp = await request('POST', '/api/v1/promotion-proposals', {
+      token: instructorAToken,
+      body: {
+        studentId: studentAProfileId,
+        targetBeltRankId: testBeltRankId || 2,
+        reason: 'Excellent training attendance and technique progress',
+      },
+    });
+    promotionProposalId = createProp.json?.data?.id;
+    if (promotionProposalId) {
+      registerCreatedResource('proposals', promotionProposalId);
+    }
+    recordTest(
+      14,
+      'Instructor creates promotion proposal POST /promotion-proposals',
+      201,
+      createProp.status,
+      createProp.status === 201 && !!promotionProposalId ? 'PASS' : 'FAIL',
+      `Proposal ID: ${promotionProposalId}`,
+      'PromotionsController_create',
+      true,
+    );
+
+    // List promotion proposals
+    const listProps = await request('GET', '/api/v1/promotion-proposals', { token: adminToken });
+    recordTest(
+      14,
+      'List promotion proposals GET /promotion-proposals',
+      200,
+      listProps.status,
+      listProps.status === 200 && Array.isArray(listProps.json?.data) ? 'PASS' : 'FAIL',
+      `Proposals count: ${listProps.json?.data?.length}`,
+      'PromotionsController_list',
+      true,
+    );
+
+    // Update proposal note
+    if (promotionProposalId) {
+      const updatePropNote = await request(
+        'PATCH',
+        `/api/v1/promotion-proposals/${promotionProposalId}`,
+        {
+          token: instructorAToken,
+          body: { reason: 'Updated note: candidate ready for upcoming promotion examination' },
+        },
+      );
+      recordTest(
+        14,
+        'Instructor updates proposal note PATCH /promotion-proposals/:id',
+        200,
+        updatePropNote.status,
+        updatePropNote.status === 200 ? 'PASS' : 'FAIL',
+        'Proposal note updated',
+        'PromotionsController_updateNote',
+        true,
+      );
+
+      // Admin reviews proposal (advisory approval)
+      const reviewProp = await request(
+        'POST',
+        `/api/v1/promotion-proposals/${promotionProposalId}/review`,
+        {
+          token: adminToken,
+          body: { status: 'APPROVED', reviewComment: 'Approved for exam registration' },
+        },
+      );
+      recordTest(
+        14,
+        'Admin reviews proposal POST /promotion-proposals/:id/review',
+        200,
+        reviewProp.status,
+        reviewProp.status === 200 ? 'PASS' : 'FAIL',
+        'Proposal reviewed as APPROVED',
+        'PromotionsController_review',
+        true,
+      );
+    }
+
+    // -----------------------------------------------------------------
+    // PHASE 15 — EVALUATIONS (FINDING N3 CLASS AUTHORIZATION)
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 15: EVALUATIONS (N3 CLASS-SCOPING) ---`);
+
+    // Finding N3: Instructor B attempting to evaluate Student A with Class A (which B does NOT teach) -> 404
+    const foreignClassEval = await request('POST', '/api/v1/evaluations', {
+      token: instructorBToken,
+      body: {
+        studentId: studentAProfileId,
+        classId: classAId,
+        periodMonth: 10,
+        periodYear: 2026,
+        rating: 8,
+      },
+    });
+    recordTest(
+      15,
+      'Foreign instructor class evaluation rejected uniform 404 (finding N3)',
+      404,
+      foreignClassEval.status,
+      foreignClassEval.status === 404 ? 'PASS' : 'FAIL',
+      'Instructor class-scoped authorization verified (finding N3 resolved)',
+    );
+
+    // Instructor A evaluates Student A referencing Class A (taught by A) -> 201
+    const createEval = await request('POST', '/api/v1/evaluations', {
+      token: instructorAToken,
+      body: {
+        studentId: studentAProfileId,
+        classId: classAId,
+        periodMonth: 10,
+        periodYear: 2026,
+        rating: 9,
+        comment: 'Outstanding dedication and technique progress',
+      },
+    });
+    evaluationId = createEval.json?.data?.id;
+    if (evaluationId) {
+      registerCreatedResource('evaluations', evaluationId);
+    }
+    recordTest(
+      15,
+      'Instructor creates student evaluation for own class POST /evaluations',
+      201,
+      createEval.status,
+      createEval.status === 201 && !!evaluationId ? 'PASS' : 'FAIL',
+      `Evaluation ID: ${evaluationId}`,
+      'EvaluationsController_create',
+      true,
+    );
+
+    // List evaluations for student
+    const listEvals = await request(
+      'GET',
+      `/api/v1/evaluations?studentId=${studentAProfileId}`,
+      {
+        token: studentAToken,
+      },
+    );
+    recordTest(
+      15,
+      'Student reads own evaluations GET /evaluations?studentId=:id',
+      200,
+      listEvals.status,
+      listEvals.status === 200 && Array.isArray(listEvals.json?.data?.items) ? 'PASS' : 'FAIL',
+      `Evaluations found: ${listEvals.json?.data?.items?.length}`,
+      'EvaluationsController_listForStudent',
+      true,
+    );
+
+    // Update evaluation
+    if (evaluationId) {
+      const updateEval = await request('PATCH', `/api/v1/evaluations/${evaluationId}`, {
+        token: instructorAToken,
+        body: { rating: 10, comment: 'Exceptional form' },
+      });
+      recordTest(
+        15,
+        'Instructor updates evaluation PATCH /evaluations/:id',
+        200,
+        updateEval.status,
+        updateEval.status === 200 ? 'PASS' : 'FAIL',
+        'Evaluation updated',
+        'EvaluationsController_update',
+        true,
+      );
+    }
+
+    // -----------------------------------------------------------------
+    // PHASE 16 — NOTIFICATIONS & CONSENT
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 16: NOTIFICATIONS & CONSENT ---`);
+
+    // Student feed
+    const feed = await request('GET', '/api/v1/notifications/feed', { token: studentAToken });
+    recordTest(
+      16,
+      'Student views notification feed GET /notifications/feed',
+      200,
+      feed.status,
+      feed.status === 200 && Array.isArray(feed.json?.data) ? 'PASS' : 'FAIL',
+      `Feed items: ${feed.json?.data?.length}`,
+      'NotificationsController_feed',
+      true,
+    );
+
+    // Mark notification read (if any in feed)
+    if (feed.json?.data?.length > 0) {
+      const notifId = feed.json.data[0].id;
+      const markRead = await request('PATCH', `/api/v1/notifications/${notifId}/read`, {
+        token: studentAToken,
+      });
+      recordTest(
+        16,
+        'Student marks notification read PATCH /notifications/:id/read',
+        200,
+        markRead.status,
+        markRead.status === 200 ? 'PASS' : 'FAIL',
+        'Notification marked read',
+        'NotificationsController_markRead',
+        true,
+      );
+    } else {
+      recordTest(
+        16,
+        'Notification mark-read skipped (feed empty for newly created synthetic student)',
+        200,
+        0,
+        'MANUAL_REQUIRED',
+        'Synthetic student feed had 0 items; mark-read verified via unit/e2e tests',
+        'NotificationsController_markRead',
+        false,
+      );
+    }
+
+    // Admin flushes outbox
+    const flushOutbox = await request('POST', '/api/v1/notifications/outbox/flush', {
+      token: adminToken,
+    });
+    recordTest(
+      16,
+      'Admin flushes notifications outbox POST /notifications/outbox/flush',
+      200,
+      flushOutbox.status,
+      flushOutbox.status === 200 ? 'PASS' : 'FAIL',
+      'Outbox flushed',
+      'NotificationsController_flush',
+      true,
+    );
+
+    // Student grants consent
+    const grantConsent = await request('POST', '/api/v1/consent', {
+      token: studentAToken,
+      body: { purpose: 'MEDIA_PUBLICATION', granted: true },
+    });
+    recordTest(
+      16,
+      'Student grants consent POST /consent',
+      200,
+      grantConsent.status,
+      grantConsent.status === 200 ? 'PASS' : 'FAIL',
+      'MEDIA_PUBLICATION consent granted',
+      'ConsentController_grant',
+      true,
+    );
+
+    // View consent history
+    const consentHist = await request('GET', '/api/v1/consent', { token: studentAToken });
+    recordTest(
+      16,
+      'Student views consent history GET /consent',
+      200,
+      consentHist.status,
+      consentHist.status === 200 && Array.isArray(consentHist.json?.data) ? 'PASS' : 'FAIL',
+      `Consent records: ${consentHist.json?.data?.length}`,
+      'ConsentController_history',
+      true,
+    );
+
+    // Revoke consent
+    const revokeConsent = await request('POST', '/api/v1/consent/revoke', {
+      token: studentAToken,
+      body: { purpose: 'MEDIA_PUBLICATION' },
+    });
+    recordTest(
+      16,
+      'Student revokes consent POST /consent/revoke',
+      200,
+      revokeConsent.status,
+      revokeConsent.status === 200 ? 'PASS' : 'FAIL',
+      'Consent revoked',
+      'ConsentController_revoke',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 17 — USER MANAGEMENT & ADMIN AUDIT
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 17: USER MANAGEMENT & ADMIN AUDIT ---`);
+
+    // Admin lists users
+    const listUsers = await request('GET', '/api/v1/users', { token: adminToken });
+    recordTest(
+      17,
+      'Admin lists users GET /users',
+      200,
+      listUsers.status,
+      listUsers.status === 200 && Array.isArray(listUsers.json?.data?.items) ? 'PASS' : 'FAIL',
+      `Total users: ${listUsers.json?.data?.total}`,
+      'AdminUsersController_list',
+      true,
+    );
+
+    // Admin updates synthetic user
+    const updateUsr = await request('PATCH', `/api/v1/users/${studentBUserId}`, {
+      token: adminToken,
+      body: { role: 'STUDENT' },
+    });
+    recordTest(
+      17,
+      'Admin updates user PATCH /users/:id',
+      200,
+      updateUsr.status,
+      updateUsr.status === 200 ? 'PASS' : 'FAIL',
+      'Synthetic user updated',
+      'AdminUsersController_update',
+      true,
+    );
+
+    // Admin self-deactivation attempt rejected (400)
+    const selfDeact = await request('DELETE', `/api/v1/users/${adminUserId}`, {
+      token: adminToken,
+    });
+    recordTest(
+      17,
+      'Admin self-deactivation attempt cleanly rejected (400)',
+      400,
+      selfDeact.status,
+      selfDeact.status === 400 ? 'PASS' : 'FAIL',
+      'Self-deactivation prevented by business rules',
+    );
+
+    // Admin audit view GET /admin/audit-log
+    const adminAudit = await request('GET', '/api/v1/admin/audit-log?limit=10', {
+      token: adminToken,
+    });
+    recordTest(
+      17,
+      'Admin views central audit log GET /admin/audit-log',
+      200,
+      adminAudit.status,
+      adminAudit.status === 200 && Array.isArray(adminAudit.json?.data?.items) ? 'PASS' : 'FAIL',
+      `Audit items: ${adminAudit.json?.data?.items?.length}`,
+      'AdminUsersController_auditLog',
+      true,
+    );
+
+    // -----------------------------------------------------------------
+    // PHASE 18 — RATE LIMITING & SECURITY POSTURE (F8)
+    // -----------------------------------------------------------------
+    console.log(`\n--- PHASE 18: RATE LIMITING & OPERATIONAL INTEGRITY ---`);
+
+    // Safe sample: 8 requests on auth login (no production flood)
+    const burstPromises = [];
+    for (let i = 0; i < 8; i++) {
+      burstPromises.push(
+        request('POST', '/api/v1/auth/login', {
+          body: { email: `probe-burst-${i}-${RUN_ID}@example.com`, password: 'WrongPassword#123' },
+        }),
+      );
+    }
+    const burstResults = await Promise.all(burstPromises);
+    const burstStatuses = burstResults.map((r) => r.status);
+    const rateLimitVerdict = evaluateRateLimitAssertion(burstStatuses);
+    const seen429 = burstStatuses.includes(429);
+
+    recordTest(
+      18,
+      'Auth rate-limiting probe (non-flooding safe sample)',
+      seen429 ? 429 : '401 (sample within budget)',
+      `Statuses: ${burstStatuses.slice(0, 4).join(', ')}...`,
+      rateLimitVerdict,
+      seen429
+        ? '429 observed on live deployment'
+        : `Safe 8-request sample within configured limit (30/min). Production flood withheld for safety. Live enforcement classified as ${rateLimitVerdict}.`,
+    );
+
+    // Verify server health post-burst
+    const postBurstHealth = await request('GET', '/healthz');
+    recordTest(
+      18,
+      'Server health verified post rate-limit probe',
+      200,
+      postBurstHealth.status,
+      postBurstHealth.status === 200 ? 'PASS' : 'FAIL',
+      'Healthz=200 post-probe',
+    );
+
+    // Scan results across all response bodies (Phase 10 / F9)
+    recordTest(
+      18,
+      'Information leak scan across actual response bodies',
+      '0 leaks',
+      `${leakScanResults.leaks.length} leaks`,
+      leakScanResults.leaks.length === 0 ? 'PASS' : 'FAIL',
+      `Scanned ${leakScanResults.scannedCount} response bodies. Leaks detected: ${leakScanResults.leaks.length}`,
+    );
+
+    runStatus = 'RUN COMPLETED';
+  } catch (err) {
+    runStatus = 'RUN ABORTED';
+    console.error('\n[FATAL ERROR DURING LIVE UAT]:', err.message);
+  } finally {
+    await performGuaranteedCleanup(runStatus);
+  }
+}
+
+run();
