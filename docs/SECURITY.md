@@ -81,6 +81,25 @@ hosting provider's responsibility (architecture baseline §4). **The application
 mitigates per-IP abuse and resource exhaustion only; it does not stop a volumetric DDoS
 attack.** This boundary is contract §13 and must not be presented as full DDoS protection.
 
+### 3.1 SharedStore Architecture & Single- vs Multi-Instance Boundary (Finding R4)
+
+The application utilizes an in-process, memory-backed `SharedStore` with TTL for high-frequency counters and ephemeral state.
+
+**Persistence & Cluster-Safe Invariants (Database-Backed):**
+- **Session Revocation**: Logout and token invalidation explicitly write `Session.revoked = true` to PostgreSQL. `JwtAuthGuard` queries the database session record on every request; even if `SharedStore` resets, revoked sessions remain permanently rejected across all instances.
+- **Refresh Token Invalidation**: `RefreshToken.revoked = true` is committed to PostgreSQL; reuse detection revokes all user sessions in the database.
+- **Password Version Invalidation**: `User.pwdVersion` is tracked in PostgreSQL; password resets immediately invalidate all issued tokens globally.
+
+**Process-Local Ephemeral State (SharedStore):**
+- IP rate-limiting counters (`IpThrottlerGuard`, `AuthIpThrottleGuard`)
+- Account login lockout failure counters (`login:lockout:*`)
+- Outbound email hourly budgets (`mail:budget:*`)
+- Ephemeral fast-path access token JTI denylist and TOTP step replay caches
+
+**Deployment Posture & Multi-Instance Constraints:**
+- **Current Render Thesis Staging**: Single container instance on Render Web Service. In this single-node topology, the in-memory `SharedStore` completely satisfies all functional and abuse-prevention requirements without external operational overhead.
+- **Production Multi-Instance Topology**: If the application is horizontally scaled across multiple container instances, an external distributed key-value store (e.g., Redis) is required to coordinate throttle counters, login lockouts, mail budgets, and temporary replay caches across nodes. The application makes **no claim of multi-instance support** under the in-memory store.
+
 ## 4. Financial integrity (verified — regression coverage)
 
 - Webhook chain: constant-time HMAC over exact raw bytes → 401 only on bad signature;
@@ -195,6 +214,20 @@ index (DDB-3).
 | Financial records | never hard-deleted; FK RESTRICT chain; integer VND | cash handling, reconciliation runbook (TASK-06) | e-invoice obligations (Decree 123/2020) — **requires accountant** | whether the club must issue e-invoices at current scale |
 | Bank account | `owner_type=BUSINESS` config guard before QR issuance | account opened in the legal entity's name | Circular 25/2025 / Decree 68/2026 — **requires verification** | tax declaration status |
 | IPs / audit logs | minimal retention (sessions/tokens purged), request-id correlation | incident response process | — | retention period for audit rows |
+
+## 11. Dependency Risk Assessment & Transitive Advisories (Finding R13)
+
+### 11.1 Bruno CLI Moderate Transitive Advisories
+An audit of repository dependencies (`npm audit --audit-level=moderate`) identifies 4 moderate advisories confined to the devDependency `@usebruno/cli@4.2.0`:
+1. `csv-parse <7.0.2` (current: 5.6.0) — Prototype replacement reachable via columns path (GHSA-8cw4-87c7-c6xx). Path: `@usebruno/cli -> csv-parse`.
+2. `uuid <11.1.1` (current: 10.0.0) — Missing buffer bounds check in v3/v5/v6 when buf is provided (GHSA-w5hq-g745-h8pq). Path: `@usebruno/cli -> @usebruno/js -> uuid`.
+
+**Triage & Risk Determination:**
+- **Zero Production Exposure**: `@usebruno/cli` is strictly a `devDependency` used for local Bruno API collection running. Production container images built with Dockerfile (`npm ci --omit=dev`) completely exclude `@usebruno/cli`, `csv-parse`, and `@usebruno/js`. They are never present in the production runtime artifact.
+- **Audit Gate Compliance**: The CI security gate enforces `npm audit --audit-level=high`. Zero high or critical vulnerabilities exist across all dependencies (including devDependencies).
+- **Existing Overrides**: `package.json` overrides already mitigate known high/critical issues in `@usebruno/cli` transitive dependencies (`form-data`, `js-yaml`, `@faker-js/faker`, `yaml`).
+- **No Compatible Upstream Release**: `@usebruno/cli@4.2.0` is the latest available release on npm. Overriding to major breaking versions (`csv-parse@7` and `uuid@11`) is unsafe for CLI operation.
+- **Accepted Risk**: This dev-only risk is formally accepted for development environments and has zero impact on live API security or production runtime.
 
 Code existence is **not** compliance. Every legal/accounting cell above needs named, dated
 human verification before any claim is made (contract §11).

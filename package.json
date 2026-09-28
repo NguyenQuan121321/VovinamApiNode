@@ -18,7 +18,7 @@
     "start:dev": "nest start --watch",
     "test": "jest",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
-    "test:uat": "node --test test/uat/uat-runner.spec.mjs",
+    "test:uat": "node --test test/uat/uat-runner.spec.mjs test/uat/generate-uat-md.spec.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

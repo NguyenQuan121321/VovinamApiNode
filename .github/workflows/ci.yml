@@ -375,16 +375,17 @@ jobs:
     steps:
       - name: Trigger Render deploy hook
         run: |
-          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
-            curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
-          else
-            echo "RENDER_DEPLOY_HOOK secret not configured; deploy-gate is a stub until the Render service exists"
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK secret is required but not configured. Failing deployment gate."
+            exit 1
           fi
+          echo "Triggering Render deployment via deploy hook..."
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
       - name: Post-deploy smoke test (healthcheck gate)
         run: |
           if [ -z "$SMOKE_TEST_URL" ]; then
-            echo "SMOKE_TEST_URL secret not configured; smoke test is a stub until the production URL exists"
-            exit 0
+            echo "::error::SMOKE_TEST_URL secret is required but not configured. Failing smoke test gate."
+            exit 1
           fi
           echo "Polling $SMOKE_TEST_URL/healthz until the new deployment answers..."
           for i in $(seq 1 30); do

@@ -67,16 +67,33 @@ export class PaymentsService {
       description: `Vovinam fee ${orderRef}`,
       expiresAt,
     });
-    const txn = await this.prisma.paymentTransaction.create({
-      data: {
-        invoiceId,
-        orderRef,
-        gateway: this.gatewayForProvider(),
-        amount: invoice.total,
-        status: 'PENDING',
-        expiresAt,
-      },
+
+    const txn = await this.prisma.$transaction(async (tx) => {
+      // Invalidate/expire any existing PENDING payment for this invoice before creating a new one (R6)
+      await tx.paymentTransaction.updateMany({
+        where: {
+          invoiceId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'FAILED',
+          note: 'Superseded by newer payment request',
+          expiresAt: new Date(),
+        },
+      });
+
+      return tx.paymentTransaction.create({
+        data: {
+          invoiceId,
+          orderRef,
+          gateway: this.gatewayForProvider(),
+          amount: invoice.total,
+          status: 'PENDING',
+          expiresAt,
+        },
+      });
     });
+
     this.audit.record({
       event: 'payment_created',
       success: true,
@@ -96,6 +113,8 @@ export class PaymentsService {
   /**
    * Public gateway webhook. Signature first (401 stops the provider), then
    * everything else answers 200 so the gateway never retries a processed event.
+   * Atomically claims and settles inside one transaction so failures can be
+   * retried safely without stranding payments (R5, R6).
    */
   async handleWebhook(
     provider: string,
@@ -121,51 +140,133 @@ export class PaymentsService {
       // Unknown order reference: nothing to process, still 200.
       return { processed: false };
     }
-    // Idempotency claim: exactly one delivery may transition PENDING -> terminal
-    // (S-03). A losing concurrent delivery (or a replay) sees count 0.
-    const claimed = await this.prisma.paymentTransaction.updateMany({
-      where: { id: txn.id, gatewayTxnId: null, status: 'PENDING' },
-      data: { gatewayTxnId: event.gatewayTxnId },
-    });
-    if (claimed.count === 0) {
+
+    // Idempotency: duplicate delivery of an already succeeded payment returns 200 no-op
+    if (txn.status === 'SUCCESS' || txn.status === 'DISPUTED') {
       return { processed: false };
     }
+    if (txn.status === 'FAILED' && txn.gatewayTxnId === event.gatewayTxnId) {
+      return { processed: false };
+    }
+
+    // Gateway reported failure: atomically transition to FAILED
+    if (!event.success) {
+      await this.prisma.paymentTransaction.update({
+        where: { id: txn.id },
+        data: {
+          status: 'FAILED',
+          gatewayTxnId: event.gatewayTxnId,
+          note: 'Gateway reported a failed transfer',
+        },
+      });
+      this.audit.record({
+        event: 'payment_failed',
+        success: true,
+        detail: `payment:${txn.id} order_ref:${txn.orderRef}`,
+      });
+      return { processed: true, outcome: 'FAILED' };
+    }
+
+    // Amount mismatch: S-11 exact amount rule -> mark DISPUTED
+    if (event.amount !== txn.amount) {
+      await this.prisma.paymentTransaction.update({
+        where: { id: txn.id },
+        data: {
+          status: 'DISPUTED',
+          gatewayTxnId: event.gatewayTxnId,
+          note: `Amount mismatch: expected ${txn.amount}, received ${event.amount}`,
+        },
+      });
+      this.audit.record({
+        event: 'payment_flagged',
+        success: false,
+        detail: `payment:${txn.id} order_ref:${txn.orderRef} expected:${txn.amount} received:${event.amount}`,
+      });
+      return { processed: false, flagged: true };
+    }
+
+    // Atomic claim + settlement inside ONE transaction (R5 + R6)
     try {
-      if (!event.success) {
-        await this.prisma.paymentTransaction.update({
-          where: { id: txn.id },
-          data: { status: 'FAILED', note: 'Gateway reported a failed transfer' },
-        });
-        this.audit.record({
-          event: 'payment_failed',
-          success: true,
-          detail: `payment:${txn.id} order_ref:${txn.orderRef}`,
-        });
-        return { processed: true, outcome: 'FAILED' };
-      }
-      if (event.amount !== txn.amount) {
-        // S-11: never mark paid on an amount mismatch — flag for manual review.
-        await this.prisma.paymentTransaction.update({
-          where: { id: txn.id },
+      type SettlementResult =
+        | { processed: false; flagged?: boolean; overpaid?: boolean; totalSettled?: number }
+        | { processed: true; outcome: 'SUCCESS' };
+
+      const result = await this.prisma.$transaction(async (tx): Promise<SettlementResult> => {
+        // Atomic claim: only claim if status is PENDING (or superseded) and gatewayTxnId is either null or this retry's gatewayTxnId
+        const claimed = await tx.paymentTransaction.updateMany({
+          where: {
+            id: txn.id,
+            status: { in: ['PENDING', 'FAILED'] },
+            OR: [{ gatewayTxnId: null }, { gatewayTxnId: event.gatewayTxnId }],
+          },
           data: {
-            status: 'DISPUTED',
-            note: `Amount mismatch: expected ${txn.amount}, received ${event.amount}`,
+            gatewayTxnId: event.gatewayTxnId,
+            status: 'SUCCESS',
+            paidAt: new Date(),
           },
         });
+
+        if (claimed.count === 0) {
+          // Already claimed/settled by concurrent delivery
+          return { processed: false };
+        }
+
+        const invoice = await tx.invoice.findUnique({ where: { id: txn.invoiceId } });
+        if (invoice === null) {
+          throw new NotFoundException('Not found');
+        }
+
+        // Sum all SUCCESS payments for this invoice
+        const settled = await tx.paymentTransaction.aggregate({
+          where: { invoiceId: txn.invoiceId, status: 'SUCCESS' },
+          _sum: { amount: true },
+        });
+        const totalSettled = settled._sum.amount ?? 0;
+
+        // R6: Overpayment policy
+        if (totalSettled > invoice.total) {
+          // Mark excess payment transaction as DISPUTED
+          await tx.paymentTransaction.update({
+            where: { id: txn.id },
+            data: {
+              status: 'DISPUTED',
+              note: `Overpayment detected: total settled ${totalSettled} exceeds invoice total ${invoice.total}; requires manual resolution`,
+            },
+          });
+          const noteText = invoice.note
+            ? `${invoice.note}; Overpayment detected: total received ${totalSettled} exceeds invoice total ${invoice.total}`
+            : `Overpayment detected: total received ${totalSettled} exceeds invoice total ${invoice.total}`;
+          await tx.invoice.update({
+            where: { id: txn.invoiceId },
+            data: { note: noteText.slice(0, 500) },
+          });
+          return { processed: false, flagged: true, overpaid: true, totalSettled };
+        }
+
+        // Normal settlement: mark invoice PAID if total is reached
+        const paid = totalSettled >= invoice.total;
+        if (paid && (invoice.status === 'UNPAID' || invoice.status === 'OVERDUE')) {
+          await tx.invoice.update({ where: { id: txn.invoiceId }, data: { status: 'PAID' } });
+        }
+
+        return { processed: true, outcome: 'SUCCESS' };
+      });
+
+      if (result.processed && result.outcome === 'SUCCESS') {
+        this.audit.record({
+          event: 'payment_succeeded',
+          success: true,
+          detail: `payment:${txn.id} invoice:${txn.invoiceId} amount:${txn.amount}`,
+        });
+      } else if (!result.processed && result.flagged) {
         this.audit.record({
           event: 'payment_flagged',
           success: false,
-          detail: `payment:${txn.id} order_ref:${txn.orderRef} expected:${txn.amount} received:${event.amount}`,
+          detail: `payment:${txn.id} invoice:${txn.invoiceId} overpayment: expected ${txn.amount}, total settled ${result.totalSettled ?? 0}`,
         });
-        return { processed: false, flagged: true };
       }
-      await this.settleInvoice(txn.invoiceId, txn.id);
-      this.audit.record({
-        event: 'payment_succeeded',
-        success: true,
-        detail: `payment:${txn.id} invoice:${txn.invoiceId} amount:${txn.amount}`,
-      });
-      return { processed: true, outcome: 'SUCCESS' };
+
+      return result;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         // A concurrent delivery stored this gateway_txn_id first: no-op, 200.
@@ -268,38 +369,6 @@ export class PaymentsService {
       items: payments.map((payment) => this.serializePayment(payment)),
       total: payments.length,
     };
-  }
-
-  /**
-   * Marks the payment SUCCESS and the invoice PAID once SUCCESS transactions
-   * cover the total (plan 7.5).
-   */
-  /**
-   * Marks the payment SUCCESS and the invoice PAID once SUCCESS transactions
-   * cover the total (plan 7.5). A webhook arriving after the QR's 30-minute
-   * expiry still settles: the expiry governs how long the QR can be newly paid,
-   * while the gateway's report of a completed transfer is authoritative on the
-   * money actually received.
-   */
-  private async settleInvoice(invoiceId: string, paymentId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.paymentTransaction.update({
-        where: { id: paymentId },
-        data: { status: 'SUCCESS', paidAt: new Date() },
-      });
-      const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
-      if (invoice === null) {
-        throw new NotFoundException('Not found');
-      }
-      const settled = await tx.paymentTransaction.aggregate({
-        where: { invoiceId, status: 'SUCCESS' },
-        _sum: { amount: true },
-      });
-      const paid = (settled._sum.amount ?? 0) >= invoice.total;
-      if (paid && (invoice.status === 'UNPAID' || invoice.status === 'OVERDUE')) {
-        await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'PAID' } });
-      }
-    });
   }
 
   /** Re-derives UNPAID/PAID after a refund or dispute; OVERDUE only flips to PAID. */

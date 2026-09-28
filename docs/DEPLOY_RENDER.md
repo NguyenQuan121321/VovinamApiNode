@@ -81,6 +81,13 @@ Application layer (implemented, tested):
   `/auth` routes) — credential stuffing, mail bombing, token guessing.
 - Per-account: login lockout (5 fails → 15 min), mail budgets (5/hour).
 - `X-Robots-Tag: noindex, nofollow` on every response; Swagger off by default.
+- **Single-instance architecture boundary (Finding R4)**: The application's `SharedStore`
+  (rate limiting, login lockout, email budgets) is process-local memory. Core security
+  (session revocation, refresh token revocation, `pwdVersion`) is 100% database-backed
+  and cluster-safe. For the thesis staging environment, single-instance deployment is the
+  active target. Multi-instance horizontal scaling requires introducing a distributed store
+  (e.g. Redis) for shared throttle counters; do not claim multi-instance support on the
+  single-process configuration.
 
 Tuning notes for real usage: if many students share one IP (club Wi-Fi / school NAT),
 raise `RATE_LIMIT_MAX_REQUESTS` and `AUTH_IP_LIMIT_MAX` — the values above are per IP,

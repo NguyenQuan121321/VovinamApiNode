@@ -38,7 +38,12 @@ const CONCURRENCY = Number(process.env.CONCURRENCY ?? 20);
 const DURATION_SECONDS = Number(process.env.DURATION_SECONDS ?? 12);
 const WARMUP_SECONDS = Number(process.env.WARMUP_SECONDS ?? 4);
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@example.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'ChangeMe123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  console.error('[FAIL FAST] Missing required environment variable: ADMIN_PASSWORD');
+  console.error('The load/smoke script requires ADMIN_PASSWORD to be provided in the runtime environment.');
+  process.exit(1);
+}
 const METRICS_TOKEN = process.env.METRICS_TOKEN ?? '';
 
 const { PrismaClient } = await import('@prisma/client');

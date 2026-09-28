@@ -33,6 +33,46 @@ Current status: **P0–P5 ALL MERGED (PRs through #26). TASK-06 FINAL QA (2026-0
 
 ## Handoff log
 
+### 2026-09-28 — Session 30: TASK-09 — Repair Confirmed Post-Repair Forensic Findings
+- **Objective:** Repair all confirmed findings from `docs/POST_REPAIR_FORENSIC_VERIFICATION.md` (R1, R5, R6, R8, R9, R4, R13) across payment transaction recovery, UAT report generator honesty, CI deployment gates, script credential hygiene, and architectural documentation.
+- **Pre-Repair Verification (Phase 0):** Independently verified directly in source:
+  - R1 CONFIRMED (`generate-uat-md.mjs:116-131` hardcoded static markdown table marking unexecuted claims VERIFIED on aborted runs)
+  - R5 CONFIRMED (`payments.service.ts` claim-before-settle recovery gap stranding transactions)
+  - R9 CONFIRMED (`ci.yml:378-388` stub echoed notice and exited 0 on missing deployment secrets)
+  - R6 CONFIRMED (`payments.service.ts` allowed unbounded concurrent pending QRs without overpayment flagging)
+  - R8 CONFIRMED (`load/smoke.mjs:41` used `process.env.ADMIN_PASSWORD ?? 'ChangeMe123'`)
+- **UAT Report Generator Honesty (R1):**
+  - Replaced static Section 4 table in `test/uat/generate-uat-md.mjs` with dynamic, evidence-driven status evaluator separating `Implementation Status` from `Live Execution Status` (`VERIFIED`, `FAILED`, `BLOCKED`, `MANUAL_REQUIRED`, `NOT_PROVEN`, `NOT_APPLICABLE`).
+  - Section 2 resource cleanup table updated: reports `NOT_APPLICABLE (0 created)` when run aborts before creating synthetic resources.
+  - Added unit test suite `test/uat/generate-uat-md.spec.mjs` covering all 6 required scenarios (completed run, credential-gate blocked run, partial run, failed operation, manual-required, not-safe-to-automate). Updated `package.json` `test:uat` script to run all UAT specs.
+- **Payment Webhook Recovery (R5):**
+  - Refactored `handleWebhook` in `src/billing/payments.service.ts` to claim and settle atomically inside one single `$transaction`.
+  - Transaction rollback on settlement failure guarantees payment state is not permanently stranded with `gatewayTxnId` set while status is pending.
+  - Subsequent retries by gateway recover cleanly and complete settlement.
+  - Added unit regression tests in `payments.service.spec.ts` for Cases 1 through 7, including the critical test: settlement failure simulation -> assert payment rolled back -> retry same webhook -> assert SUCCESS and invoice PAID.
+- **Multiple Pending QR & Overpayment Handling (R6):**
+  - In `createQrPayment`, atomically invalidate/expire any existing PENDING payment transactions for the invoice (`status: 'FAILED', note: 'Superseded by newer payment request', expiresAt: now`) before creating a new QR.
+  - In `handleWebhook`, added explicit overpayment detection: when total settled amount exceeds invoice total, mark excess payment transaction `DISPUTED` with descriptive overpayment note, update invoice note, and emit `payment_flagged` audit event.
+  - Added unit tests for one QR, duplicate QR, concurrent QR, two successful callbacks with overpayment detection, one success + one fail, and expired payment then new QR.
+- **Remove Fallback Credential (R8):**
+  - Removed `?? 'ChangeMe123'` fallback from `load/smoke.mjs`. Sourced strictly from `ADMIN_PASSWORD` in the environment with fail-fast exit code 1 if missing.
+- **CI Deployment Gate Integrity (R9):**
+  - Removed silent `exit 0` stub in `.github/workflows/ci.yml`. Missing `RENDER_DEPLOY_HOOK` or `SMOKE_TEST_URL` now fails fast with an explicit GitHub Actions error (`exit 1`).
+  - A green deployment gate guarantees that the deployment hook was invoked and `/healthz` + `/readyz` smoke probes succeeded.
+- **Architectural Documentation (R4 & R13):**
+  - Documented `SharedStore` in-memory architecture, cluster-safe Postgres-backed invariants (sessions, tokens, `pwdVersion`), process-local ephemeral counters, and single-instance vs multi-instance boundaries in `docs/SECURITY.md` §3.1 and `docs/DEPLOY_RENDER.md` §5.
+  - Documented Bruno CLI transitive moderate advisories in `docs/SECURITY.md` §11, establishing dev-only isolation from production runtime and 0 high/critical audit compliance.
+- **Verification Evidence:**
+  - `npm run format:check` ✓
+  - `npm run lint` ✓ (0 problems, 0 warnings)
+  - `npm run typecheck` ✓
+  - `npm run build` ✓
+  - `npm test -- --coverage` ✓ (441/441 passed, 83 suites, global/module coverage floors met)
+  - `npm run test:uat` ✓ (15/15 passed)
+  - `npm run openapi:generate` ✓ (88 paths written, 0 drift vs committed openapi.json)
+  - `npm run contract:lint` ✓ (spectral 0 errors)
+  - `npm audit --audit-level=high` ✓ (0 high/critical vulnerabilities)
+
 ### 2026-09-28 — Session 29: Repair Confirmed Live-UAT / Security / Business-Logic Findings
 - **Objective:** Repair all confirmed findings from `docs/LIVE_UAT_FORENSIC_VERIFICATION.md` (F1/F2, F3, F4, F6, F7, F8, F9, F10, N1, N2, N3) across backend logic, live UAT harness, reporting, and documentation.
 - **Backend Business Logic (N3):** In `src/evaluations/evaluations.service.ts`, scoped `classId` validation to enforce that an `INSTRUCTOR` caller can only attach evaluations to classes they teach (`target class.instructorId === caller.id`), returning uniform 404 for foreign or non-existent classes. ADMIN retains unrestricted class reference. Unit tests added to `evaluations.service.spec.ts` (11/11 passed); E2E regression assertions added to `test/e2e/matrix-workflows.e2e-spec.ts`.

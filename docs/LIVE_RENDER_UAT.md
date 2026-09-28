@@ -43,15 +43,15 @@ To eliminate data corruption and ensure complete isolation from demo or real rec
 ### Synthetic Resources Created & Cleaned
 | Resource Type | Created in Run | Cleaned Up on Exit | Status |
 |---|---|---|---|
-| User Accounts | 0 | 0 (Deactivated) | **VERIFIED** |
-| Student Profiles | 0 | 0 (Soft-deleted) | **VERIFIED** |
-| Classes | 0 | 0 | **VERIFIED** |
-| Schedules | 0 | 0 (Removed) | **VERIFIED** |
-| Enrollments | 0 | 0 (Removed) | **VERIFIED** |
-| Announcements | 0 | 0 (Deleted) | **VERIFIED** |
-| Leave Requests | 0 | 0 (Deleted/Cancelled) | **VERIFIED** |
-| Evaluations | 0 | 0 (Deleted) | **VERIFIED** |
-| Discounts | 0 | 0 (Deleted) | **VERIFIED** |
+| User Accounts | 0 | 0 (Deactivated) | **NOT_APPLICABLE** (0 created) |
+| Student Profiles | 0 | 0 (Soft-deleted) | **NOT_APPLICABLE** (0 created) |
+| Classes | 0 | 0 (Deleted) | **NOT_APPLICABLE** (0 created) |
+| Schedules | 0 | 0 (Removed) | **NOT_APPLICABLE** (0 created) |
+| Enrollments | 0 | 0 (Removed) | **NOT_APPLICABLE** (0 created) |
+| Announcements | 0 | 0 (Deleted) | **NOT_APPLICABLE** (0 created) |
+| Leave Requests | 0 | 0 (Deleted/Cancelled) | **NOT_APPLICABLE** (0 created) |
+| Evaluations | 0 | 0 (Deleted) | **NOT_APPLICABLE** (0 created) |
+| Discounts | 0 | 0 (Deleted) | **NOT_APPLICABLE** (0 created) |
 
 ### Immutable Financial Residue (Preserved by Database Foreign-Key Policy)
 By application design, financial invoices and payments enforce historical immutability (`onDelete: Restrict`). The synthetic financial entities created in this run remain safely associated only with the soft-deleted synthetic student profiles:
@@ -74,20 +74,22 @@ Actual response bodies received from the live server were inspected for sensitiv
 
 ## 4. Operational Invariant Verification Verdicts
 
-| Domain Invariant / Finding | Verification Method | Verdict | Evidence / Note |
-|---|---|---|---|
-| **F1/F2 Credential Repair** | Static + Runtime Env Check | **VERIFIED** | No credentials in repository source or markdown. Sourced exclusively from environment variables. |
-| **F3 Resource Isolation** | Synthetic Graph + Dynamic Registry | **VERIFIED** | Zero fixed business IDs. All mutations scoped to per-run synthetic entities. |
-| **F4 Global Settings Preservation** | Route Execution Filter | **VERIFIED** | Mutating global `tuition-rates` and `bank-account` PUT endpoints skipped on live. |
-| **F5 Financial Mutation Safety** | Synthetic Invoices Only | **VERIFIED** | Pre-existing financial records untouched; payments exercised on synthetic invoices only. |
-| **F6 OpenAPI Coverage Integrity** | Evidence-backed Calculation | **VERIFIED** | Operations marked COVERED only upon executed HTTP request + passing assertion. |
-| **F7 /docs Fail-Closed Assertion** | Dynamic Status Comparison | **VERIFIED** | Enforces HTTP 200 comparison; fail-closed on 404/500. |
-| **F8 Rate-Limit Non-Flooding** | Safe Sample + Status Evaluation | **VERIFIED** | Safe 8-request probe distinguished 401 from 429/500/503 without flooding live Render service. |
-| **F9 Dynamic Reporting** | Results JSON Interpolation | **VERIFIED** | Markdown generated strictly from machine-readable JSON execution records. |
-| **F10 Guaranteed Cleanup** | `try/finally` + Process Signals | **VERIFIED** | Exit handlers trap SIGINT/SIGTERM; cleans registered IDs only; produces results JSON on abort. |
-| **N1 Render Environment Posture** | Documentation Alignment | **VERIFIED** | Explicitly classified as Staging/Integration deployment running simulated payment gateway. |
-| **N2 Swagger Posture** | Staging Documentation | **VERIFIED** | Intentionally enabled on Render for frontend/thesis integration review. |
-| **N3 Evaluation Class Scoping** | Anti-probing 404 Assertion | **VERIFIED** | Instructors prevented from attaching evaluations to classes they do not teach. |
+Separation of implementation contract verification (source, test suite, and static gates) from live black-box execution evidence. An invariant is marked **VERIFIED** in live execution only when actual execution evidence exists.
+
+| Domain Invariant / Finding | Verification Focus | Implementation Status | Live Execution Status | Evidence / Notes |
+|---|---|---|---|---|
+| **F1/F2 Credential Repair** | Runtime Credentials & Source Hygiene | **VERIFIED** | **BLOCKED** | LIVE_UAT_ADMIN_PASSWORD missing in runtime environment; authentication safely blocked. |
+| **F3 Resource Isolation** | Synthetic Graph & Zero Pre-existing IDs | **VERIFIED** | **NOT_PROVEN** | Run created 0 synthetic entities; resource isolation unproven in live run. |
+| **F4 Global Settings Preservation** | Settings Immutability on Live | **VERIFIED** | **NOT_PROVEN** | Run aborted before settings safety assertions were reached. |
+| **F5 Financial Mutation Safety** | Synthetic Invoices & Payment Isolation | **VERIFIED** | **NOT_PROVEN** | No financial workflows executed live in this run. |
+| **F6 OpenAPI Coverage Integrity** | Coverage Calculated on Pass Only | **VERIFIED** | **NOT_PROVEN** | Only 3/111 operations covered; live run did not execute full API suite. |
+| **F7 /docs Fail-Closed Assertion** | HTTP 200 Dynamic Evaluation | **VERIFIED** | **VERIFIED** | Live /docs responded with HTTP 200 and was dynamically verified. |
+| **F8 Rate-Limit Non-Flooding** | Safe Sampling Rate Probe | **VERIFIED** | **NOT_PROVEN** | Rate limit probe was not reached during this run. |
+| **F9 Dynamic Reporting** | JSON-driven Report Interpolation | **VERIFIED** | **VERIFIED** | Report generated dynamically from execution JSON (6 tests, 5 pass, 0 fail). |
+| **F10 Guaranteed Cleanup** | Signal Trapping & Process Cleanup | **VERIFIED** | **NOT_APPLICABLE** | Zero synthetic resources were created; cleanup had no live entities to process. |
+| **N1 Render Environment Posture** | Staging Deployment Classification | **VERIFIED** | **VERIFIED** | Render live probes confirmed /healthz and /readyz (DB up) in staging posture. |
+| **N2 Swagger Posture** | Staging Documentation Enablement | **VERIFIED** | **VERIFIED** | Swagger OpenAPI document actively served at /docs-json for staging review. |
+| **N3 Evaluation Class Scoping** | Instructor Scoping Anti-probing 404 | **VERIFIED** | **NOT_PROVEN** | Run aborted before evaluation workflow was reached; unproven in live run. |
 
 ---
 
