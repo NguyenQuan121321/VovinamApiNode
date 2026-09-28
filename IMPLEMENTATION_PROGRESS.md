@@ -70,8 +70,16 @@ Current status: **P0–P5 ALL MERGED (PRs through #26). TASK-06 FINAL QA (2026-0
   - `npm test -- --coverage` ✓ (441/441 passed, 83 suites, global/module coverage floors met)
   - `npm run test:uat` ✓ (15/15 passed)
   - `npm run openapi:generate` ✓ (88 paths written, 0 drift vs committed openapi.json)
-  - `npm run contract:lint` ✓ (spectral 0 errors)
   - `npm audit --audit-level=high` ✓ (0 high/critical vulnerabilities)
+  - GitHub Actions CI (Run 36391453299 on commit a330980):
+    - All 12 test, security, build, migration, and container scan jobs passed green: `audit` ✓, `integration` ✓ (PostgreSQL E2E 100/100), `license-check` ✓, `lint` ✓, `build-test` ✓ (441/441 unit, coverage gate), `secrets-scan` ✓, `migration-dry-run` ✓, `contract-gate` ✓, `tech-debt-gate` ✓, `sast` ✓, `docker` ✓, `container-scan` (trivy) ✓.
+    - `deploy + smoke test` job failed fast with exit code 1 due to missing `RENDER_DEPLOY_HOOK` secret: `RENDER_DEPLOY_HOOK secret is required but not configured. Failing deployment gate.` — confirming R9 failure mode empirically in CI.
+  - Live Render Verification (`https://vovinamapinode.onrender.com`):
+    - `GET /healthz`: 200 OK `{"code":200,"message":"OK","data":{"status":"ok"}}` (441ms)
+    - `GET /readyz`: 200 OK `{"code":200,"message":"OK","data":{"status":"ok","database":"up"}}` (91ms)
+    - `GET /docs`: 200 OK Swagger UI HTML (86ms)
+    - `GET /docs-json`: 200 OK 88 paths, 111 operations, OpenAPI 3.0.0 (92ms, 100% parity)
+    - `GET /metrics`: 401 Unauthorized `{"code":401,"message":"Unauthorized","data":null}` (94ms)
 
 ### 2026-09-28 — Session 29: Repair Confirmed Live-UAT / Security / Business-Logic Findings
 - **Objective:** Repair all confirmed findings from `docs/LIVE_UAT_FORENSIC_VERIFICATION.md` (F1/F2, F3, F4, F6, F7, F8, F9, F10, N1, N2, N3) across backend logic, live UAT harness, reporting, and documentation.
