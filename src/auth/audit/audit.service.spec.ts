@@ -23,7 +23,7 @@ describe('AuditService', () => {
     expect(Array.isArray(createMany.mock.calls[0]?.[0]?.data)).toBe(true);
   });
 
-  it('truncates detail to the 500-char column limit and clears the queue on failure', async () => {
+  it('truncates details and retains a failed batch for the next flush', async () => {
     service.record({
       event: 'login_failed',
       success: false,
@@ -38,7 +38,8 @@ describe('AuditService', () => {
     service.record({ event: 'login', success: true });
     await service.flush();
     await service.flush();
-    expect(createMany).toHaveBeenCalledTimes(2);
+    expect(createMany).toHaveBeenCalledTimes(3);
+    expect(createMany.mock.calls[1]?.[0]?.data).toEqual(createMany.mock.calls[2]?.[0]?.data);
   });
 
   it('flushes on module destroy', async () => {

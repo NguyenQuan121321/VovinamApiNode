@@ -258,6 +258,7 @@ model UsedToken {
 }
 
 model AuditLog {
+  eventId   String   @unique @default(dbgenerated("gen_random_uuid()")) @map("event_id") @db.Uuid
   id        Int      @id @default(autoincrement())
   userId    String?  @map("user_id") @db.Uuid
   event     String   @db.VarChar(50)
@@ -295,9 +296,9 @@ model BeltRank {
   isActive   Boolean       @default(true) @map("is_active")
 
   students                 StudentProfile[]
-  exams                    BeltExam[]         @relation("ExamTargetRank")
-  currentRankRegistrations ExamRegistration[] @relation("RegistrationCurrentRank")
-  targetRankRegistrations  ExamRegistration[] @relation("RegistrationTargetRank")
+  exams                    BeltExam[]          @relation("ExamTargetRank")
+  currentRankRegistrations ExamRegistration[]  @relation("RegistrationCurrentRank")
+  targetRankRegistrations  ExamRegistration[]  @relation("RegistrationTargetRank")
   proposals                PromotionProposal[] @relation("ProposalTargetRank")
 
   @@map("belt_ranks")
@@ -602,6 +603,7 @@ model PaymentTransaction {
 /// feed at insert (status SENT, readAt set when read). user_id is SET NULL so
 /// delivery history survives account deletion without blocking it.
 model Notification {
+  claimedAt     DateTime?           @map("claimed_at")
   id            String              @id @default(uuid()) @db.Uuid
   userId        String?             @map("user_id") @db.Uuid
   user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -621,6 +623,7 @@ model Notification {
 
   @@index([userId, createdAt])
   @@index([status, nextAttemptAt])
+  @@index([status, claimedAt])
   @@map("notifications")
 }
 

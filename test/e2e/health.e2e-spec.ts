@@ -44,6 +44,15 @@ describe('Health and ops endpoints (e2e)', () => {
     await request(server).get('/metrics').set('Authorization', 'Bearer wrong').expect(401);
   });
 
+  it('GET /version exposes only the configured source identity', () =>
+    request(app.getHttpServer())
+      .get('/version')
+      .expect(200)
+      .expect((res) => {
+        const expected = process.env.BUILD_SHA || process.env.RENDER_GIT_COMMIT || null;
+        expect(res.body).toEqual({ code: 200, message: 'OK', data: { commit: expected } });
+      }));
+
   it('GET /metrics returns raw Prometheus text for the correct bearer', () =>
     request(app.getHttpServer())
       .get('/metrics')

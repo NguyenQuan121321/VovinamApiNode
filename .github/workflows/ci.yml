@@ -54,7 +54,7 @@ jobs:
           # - gcm-no-tag-length: the GCM auth tag length IS pinned to 16 in
           #   src/auth/mfa/seal.service.ts; @types/node does not model the length arg.
           docker run --rm -v "$PWD:/src" --workdir /src \
-            semgrep/semgrep:latest semgrep scan \
+            semgrep/semgrep:1.178.0 semgrep scan \
             --config p/owasp-top-ten --config p/typescript --config p/secrets \
             --metrics=off --json --output /src/semgrep-report.json \
             --exclude-rule generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash \
@@ -67,17 +67,10 @@ jobs:
           path: semgrep-report.json
           if-no-files-found: ignore
       - name: Fail on Semgrep findings (emitted as annotations)
+        env:
+          SEMGREP_EXIT_CODE: ${{ steps.sast.outputs.exitcode }}
         run: |
-          node -e "
-            const report = require('./semgrep-report.json');
-            const results = report.results ?? [];
-            console.log('Semgrep findings:', results.length);
-            for (const r of results.slice(0, 30)) {
-              const line = r.start?.line ?? 1;
-              console.log('::error file=' + r.path + ',line=' + line + ',title=' + r.check_id + '::' + String(r.extra?.message ?? '').split('\n')[0].slice(0, 120));
-            }
-            process.exit(results.length === 0 ? 0 : 1);
-          "
+          node scripts/check-semgrep-report.cjs semgrep-report.json "$SEMGREP_EXIT_CODE"
 
   audit:
     name: audit (npm audit high)
@@ -170,9 +163,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - run: node --test test/scripts/*.spec.cjs
       # jest --coverage fails the job when the 75% floor (auth/billing/classes, plan 12)
       # is not met: the coverage gate.
       - run: npm test -- --coverage
+      - run: npm run test:uat
 
   migration-dry-run:
     runs-on: ubuntu-latest
@@ -293,7 +288,7 @@ jobs:
           }
           echo "Committed contract matches the generated one"
       - name: Spectral lint (contract quality)
-        run: npx spectral lint openapi.json --fail-severity=error
+        run: npm run contract:lint
 
   # ── Image build and scan (only after heavy verification passed) ─────────────
   docker:
@@ -308,6 +303,7 @@ jobs:
           context: .
           load: true
           tags: vovinam-api:ci
+          build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -324,6 +320,7 @@ jobs:
           context: .
           load: true
           tags: vovinam-api:ci
+          build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
       - name: Scan image for HIGH/CRITICAL vulnerabilities
         run: |
@@ -380,27 +377,10 @@ jobs:
             exit 1
           fi
           echo "Triggering Render deployment via deploy hook..."
-          curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
-      - name: Post-deploy smoke test (healthcheck gate)
-        run: |
-          if [ -z "$SMOKE_TEST_URL" ]; then
-            echo "::error::SMOKE_TEST_URL secret is required but not configured. Failing smoke test gate."
-            exit 1
-          fi
-          echo "Polling $SMOKE_TEST_URL/healthz until the new deployment answers..."
-          for i in $(seq 1 30); do
-            STATUS=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 5 "$SMOKE_TEST_URL/healthz" || true)
-            if [ "$STATUS" = "200" ]; then
-              echo "healthz OK after attempt $i"
-              READY=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 5 "$SMOKE_TEST_URL/readyz" || true)
-              if [ "$READY" = "200" ]; then
-                echo "readyz OK — database reachable, deployment accepted"
-                exit 0
-              fi
-              echo "::error::healthz answered but readyz returned $READY — database not reachable"
-              exit 1
-            fi
-            sleep 10
-          done
-          echo "::error::Smoke test failed: /healthz never returned 200 within 5 minutes"
-          exit 1
+          curl -fsS --max-time 30 -X POST -G --data-urlencode "ref=$GITHUB_SHA" "$RENDER_DEPLOY_HOOK"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify the deployed commit, liveness and readiness
+        run: node scripts/verify-deployment.cjs

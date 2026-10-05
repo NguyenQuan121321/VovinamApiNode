@@ -43,7 +43,7 @@ export async function createApp() {
 
   app.useLogger(app.get(PinoLoggerService));
   // Trust the first proxy hop (Render/nginx) so client IPs for rate limiting are real.
-  (app.getHttpAdapter().getInstance() as Express).set('trust proxy', 1);
+  (app.getHttpAdapter().getInstance() as Express).set('trust proxy', env.trustProxyHops);
 
   // The verify callback captures the untouched raw bytes so gateway webhook
   // signatures (plan 7.5) verify against exactly what the provider sent.
@@ -74,6 +74,7 @@ export async function createApp() {
     exclude: [
       { path: 'healthz', method: RequestMethod.GET },
       { path: 'readyz', method: RequestMethod.GET },
+      { path: 'version', method: RequestMethod.GET },
       { path: 'metrics', method: RequestMethod.GET },
     ],
   });

@@ -5,6 +5,9 @@ export type NodeEnv = 'local' | 'test' | 'staging' | 'production';
 export interface Env {
   NODE_ENV: NodeEnv;
   PORT: number;
+  BUILD_SHA?: string;
+  RENDER_GIT_COMMIT?: string;
+  TRUST_PROXY_HOPS: number;
   DATABASE_URL: string;
   JWT_SECRET: string;
   JWT_SECRET_PREVIOUS?: string;
@@ -24,7 +27,7 @@ export interface Env {
   CORS_ALLOWED_ORIGINS: string[];
   SWAGGER_ENABLED: boolean;
   METRICS_TOKEN?: string;
-  /** logging (default) keeps outbound mail in the pino log; smtp delivers via nodemailer. */
+  /** logging records template metadata only; smtp delivers via nodemailer. */
   MAIL_DRIVER: 'logging' | 'smtp';
   /**
    * Test-only capture file for LoggingMailSender (writes full messages incl.
@@ -65,7 +68,16 @@ const optionalString = Joi.string().allow('').optional();
 export const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('local', 'test', 'staging', 'production').default('local'),
   PORT: Joi.number().integer().port().default(3000),
+  BUILD_SHA: Joi.string()
+    .pattern(/^[a-f0-9]{40}$/i)
+    .allow('')
+    .optional(),
+  RENDER_GIT_COMMIT: Joi.string()
+    .pattern(/^[a-f0-9]{40}$/i)
+    .allow('')
+    .optional(),
   DATABASE_URL: Joi.string().uri().required(),
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).max(5).default(1),
   JWT_SECRET: Joi.string().min(32).max(256).required(),
   JWT_SECRET_PREVIOUS: Joi.string().min(32).max(256).allow('').optional(),
   JWT_ISSUER: Joi.string().default('vovinam-api'),

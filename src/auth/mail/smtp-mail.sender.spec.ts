@@ -37,6 +37,9 @@ describe('SmtpMailSender', () => {
       host: 'smtp.example.com',
       port: 587,
       secure: false,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: { user: 'club@example.com', pass: 'secret-password' },
     });
   });
@@ -50,6 +53,9 @@ describe('SmtpMailSender', () => {
       host: 'smtp.example.com',
       port: 465,
       secure: true,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
   });
 
@@ -83,7 +89,7 @@ describe('SmtpMailSender', () => {
     expect(logged).not.toContain('abc123');
   });
 
-  it('never throws on delivery failure — notifications must not break the request path', async () => {
+  it('propagates a sanitized delivery failure so the outbox retries', async () => {
     sendMail.mockRejectedValue(new Error('SMTP connection refused'));
     const logger = makeLogger() as { error: jest.Mock };
     const sender = new SmtpMailSender(makeEnv(), logger as never);
@@ -94,10 +100,7 @@ describe('SmtpMailSender', () => {
         body: 'A new device signed in',
         templateCode: 'NEW_IP_LOGIN',
       }),
-    ).resolves.toBeUndefined();
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'parent@example.com', err: 'SMTP connection refused' }),
-      'mail_send_failed',
-    );
+    ).rejects.toThrow('Mail delivery failed');
+    expect(logger.error).toHaveBeenCalledWith({ template: 'NEW_IP_LOGIN' }, 'mail_send_failed');
   });
 });

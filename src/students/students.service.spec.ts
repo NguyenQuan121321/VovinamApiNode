@@ -88,7 +88,7 @@ describe('StudentsService', () => {
     prisma.studentProfile.findUnique.mockResolvedValue(null);
     prisma.studentProfile.create.mockResolvedValue(profile);
 
-    const result = await service.create({ ...createDto, linkedUserEmail: 's@example.com' });
+    const result = await service.create(admin, { ...createDto, linkedUserEmail: 's@example.com' });
     expect(result.inviteCode).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
     expect(result.status).toBe('ACTIVE');
     expect(prisma.studentProfile.create).toHaveBeenCalledWith(
@@ -99,7 +99,7 @@ describe('StudentsService', () => {
   it('rejects unknown linked accounts, duplicates, and unknown belt ranks', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     await expect(
-      service.create({ ...createDto, linkedUserEmail: 'ghost@example.com' }),
+      service.create(admin, { ...createDto, linkedUserEmail: 'ghost@example.com' }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     prisma.user.findUnique.mockResolvedValue({ id: 'u', role: 'STUDENT', deletedAt: null });
@@ -107,15 +107,15 @@ describe('StudentsService', () => {
       .mockResolvedValueOnce({ id: 'existing' })
       .mockResolvedValue(null);
     await expect(
-      service.create({ ...createDto, linkedUserEmail: 's@example.com' }),
+      service.create(admin, { ...createDto, linkedUserEmail: 's@example.com' }),
     ).rejects.toBeInstanceOf(ConflictException);
 
     prisma.studentProfile.findUnique.mockResolvedValue(null);
     prisma.beltRank.findUnique.mockResolvedValue(null);
     prisma.studentProfile.create.mockResolvedValue(profile);
-    await expect(service.create({ ...createDto, currentBeltRankId: 99 })).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.create(admin, { ...createDto, currentBeltRankId: 99 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('lists non-deleted profiles with pagination (ADMIN scope)', async () => {
@@ -148,15 +148,15 @@ describe('StudentsService', () => {
     prisma.studentProfile.update.mockResolvedValue(profile);
     prisma.beltRank.findUnique.mockResolvedValue({ id: 3 });
     await expect(
-      service.update('sp-1', { phone: '0999', currentBeltRankId: 3 }),
+      service.update(admin, 'sp-1', { phone: '0999', currentBeltRankId: 3 }),
     ).resolves.toMatchObject({ fullName: 'Nguyen Van B' });
 
     prisma.beltRank.findUnique.mockResolvedValue(null);
-    await expect(service.update('sp-1', { currentBeltRankId: 99 })).rejects.toBeInstanceOf(
+    await expect(service.update(admin, 'sp-1', { currentBeltRankId: 99 })).rejects.toBeInstanceOf(
       NotFoundException,
     );
     prisma.studentProfile.findFirst.mockResolvedValue(null);
-    await expect(service.update('missing', { status: 'ACTIVE' })).rejects.toBeInstanceOf(
+    await expect(service.update(admin, 'missing', { status: 'ACTIVE' })).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -164,7 +164,7 @@ describe('StudentsService', () => {
   it('soft-deletes once, deactivates the linked account, and audits the mutation', async () => {
     prisma.studentProfile.updateMany.mockResolvedValue({ count: 1 });
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
-    await expect(service.softDelete('sp-1')).resolves.toEqual({ deleted: true });
+    await expect(service.softDelete(admin, 'sp-1')).resolves.toEqual({ deleted: true });
     expect(prisma.user.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
     );
@@ -173,18 +173,20 @@ describe('StudentsService', () => {
     );
 
     prisma.studentProfile.updateMany.mockResolvedValue({ count: 0 });
-    await expect(service.softDelete('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.softDelete(admin, 'missing')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('rotates invite codes for existing profiles', async () => {
     prisma.studentProfile.findFirst.mockResolvedValue(profile);
     prisma.studentProfile.findUnique.mockResolvedValue(null);
     prisma.studentProfile.update.mockResolvedValue({ ...profile, inviteCode: 'NEWCODE9' });
-    await expect(service.regenerateInviteCode('sp-1')).resolves.toEqual({
+    await expect(service.regenerateInviteCode(admin, 'sp-1')).resolves.toEqual({
       inviteCode: 'NEWCODE9',
     });
     prisma.studentProfile.findFirst.mockResolvedValue(null);
-    await expect(service.regenerateInviteCode('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.regenerateInviteCode(admin, 'missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('myProfile returns the linked profile or a uniform 404', async () => {

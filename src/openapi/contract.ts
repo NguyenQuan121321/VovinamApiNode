@@ -479,6 +479,26 @@ export const TAG_DESCRIPTIONS: Record<string, string> = {
 
 /** The full contract: "METHOD path" → operation metadata. */
 export const CONTRACT: Record<string, OpContract> = {
+  'GET /version': {
+    summary: 'Deployed source identity',
+    description:
+      'Returns the configured build commit (BUILD_SHA or Render RENDER_GIT_COMMIT). A null commit means identity is unavailable. No environment values or credentials are exposed.',
+    auth: 'public',
+    errors: [E429],
+    data: {
+      type: 'object',
+      required: ['commit'],
+      properties: {
+        commit: {
+          type: 'string',
+          nullable: true,
+          pattern: '^[a-fA-F0-9]{40}$',
+          description: 'Full Git commit identifier, or null when unavailable.',
+          example: 'a'.repeat(40),
+        },
+      },
+    },
+  },
   // ── Health ────────────────────────────────────────────────────────────────
   'GET /healthz': {
     summary: 'Liveness probe',
@@ -1715,7 +1735,7 @@ export const CONTRACT: Record<string, OpContract> = {
   'POST /api/v1/payments/qr/{invoiceId}': {
     summary: 'Start a QR payment for an invoice',
     description:
-      'Creates a PENDING payment transaction with a unique order reference and gateway checkout/QR payload (30-minute QR expiry). Ownership guard: ADMIN/STUDENT own, PARENT linked children. Only UNPAID/OVERDUE invoices are payable (409); the receiving bank account must be configured (409). Instructors have no money surface.',
+      'Creates a PENDING payment transaction with a unique order reference and gateway checkout/QR payload (30-minute QR expiry). Replacement requests are serialized per invoice; each supersedes older pending attempts. Ownership guard: ADMIN/STUDENT own, PARENT linked children. Only UNPAID/OVERDUE invoices are payable (409); the receiving bank account must be configured (409). Instructors have no money surface.',
     auth: 'bearer',
     roles: ['ADMIN', 'STUDENT', 'PARENT'],
     status: 201,
@@ -1743,7 +1763,7 @@ export const CONTRACT: Record<string, OpContract> = {
   'POST /api/v1/payments/webhook/{provider}': {
     summary: 'Payment gateway webhook (public, HMAC-signed)',
     description:
-      'PUBLIC webhook — authentication is the HMAC signature over the RAW request body, not a JWT. A bad signature answers 401 so the gateway retries; everything else answers 200 to stop retries (unknown orders and malformed-but-signed events are 200 no-ops). Processing is idempotent: the gateway transaction id is claimed exactly once, so duplicate/parallel deliveries never double-settle. A signed amount mismatch marks the payment DISPUTED and never marks the invoice paid; a matching SUCCESS amount settles the invoice once SUCCESS transactions cover the total.',
+      'PUBLIC webhook authenticated by HMAC over the RAW body. Invalid signatures return 401. Unknown orders and signed malformed events are 200 no-ops. Database/transaction failures return 5xx so the provider can retry; claims and settlement roll back together. All receipt transitions serialize per invoice. Duplicate transaction IDs are idempotent. Amount mismatches, expired QR receipts and receipts for cancelled/refunded invoices become DISPUTED for manual reconciliation. Excess settlement is flagged; it never silently increases accepted SUCCESS totals beyond the invoice total.',
     auth: 'webhook',
     data: {
       type: 'object',
@@ -1752,12 +1772,21 @@ export const CONTRACT: Record<string, OpContract> = {
         processed: b('Whether the event changed state.', true),
         outcome: en('Settlement outcome when processed.', ['SUCCESS', 'FAILED'], 'SUCCESS'),
         flagged: b(
-          'True when the event was processed but flagged (amount mismatch → DISPUTED).',
+          'True when a received transfer requires reconciliation and is marked DISPUTED.',
           false,
+        ),
+        overpaid: b('True when accepted settlements would exceed the invoice total.', false),
+        totalSettled: i(
+          'Attempted aggregate settled amount when overpayment is detected (VND).',
+          800000,
         ),
       },
     },
-    errors: [{ status: 401, description: 'HMAC signature verification failed.' }],
+    errors: [
+      E404,
+      { status: 401, description: 'HMAC signature verification failed.' },
+      { status: 500, description: 'Transactional processing failed; retry the same signed event.' },
+    ],
   },
   'POST /api/v1/payments/{invoiceId}/confirm-cash': {
     summary: 'Confirm a cash payment (ADMIN)',
@@ -1772,7 +1801,7 @@ export const CONTRACT: Record<string, OpContract> = {
   'PATCH /api/v1/payments/{id}': {
     summary: 'Refund or dispute a payment (ADMIN)',
     description:
-      'Marks a SUCCESS payment REFUNDED or DISPUTED (wrong transfer). Only SUCCESS payments qualify (409). The invoice status is re-derived: after a refund the invoice flips back to UNPAID unless another settlement still covers the total.',
+      'Records an externally completed refund or flags a successful receipt for review. This API does not initiate a bank transfer. SUCCESS receipts may be marked REFUNDED or DISPUTED; DISPUTED receipts may be marked REFUNDED. Other transitions return 409. Invoice status is recomputed under the same invoice lock; history is retained and webhook replay cannot change a REFUNDED receipt.',
     auth: 'bearer',
     roles: ['ADMIN'],
     data: Payment,

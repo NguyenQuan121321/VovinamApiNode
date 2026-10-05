@@ -53,6 +53,7 @@ function makePrismaMock() {
   return {
     invoice: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
     paymentTransaction: {
+      findFirst: jest.fn().mockResolvedValue(null),
       findUnique: jest.fn(),
       findMany: jest.fn(),
       updateMany: jest.fn(),
@@ -61,6 +62,7 @@ function makePrismaMock() {
       aggregate: jest.fn(),
     },
     appSetting: { findUnique: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(),
   };
 }
@@ -116,6 +118,7 @@ describe('PaymentsService (plan 7.5, S-03, S-11)', () => {
       value: { owner_type: 'BUSINESS', bin: '9704', number: '0123456789', name: 'CLUB LLC' },
     });
     prisma.paymentTransaction.create.mockResolvedValue(pendingTxn);
+    prisma.paymentTransaction.updateMany.mockResolvedValue({ count: 1 });
   });
 
   describe('createQrPayment', () => {
@@ -493,7 +496,9 @@ describe('PaymentsService (plan 7.5, S-03, S-11)', () => {
       prisma.$transaction.mockImplementation(
         async (callback: (tx: unknown) => Promise<unknown>) => {
           const tx = {
+            $queryRaw: jest.fn().mockResolvedValue([]),
             paymentTransaction: {
+              findFirst: jest.fn().mockResolvedValue(null),
               updateMany: jest
                 .fn()
                 .mockImplementation(async ({ data }: { data: { gatewayTxnId?: string } }) => {

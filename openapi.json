@@ -182,6 +182,72 @@
         ]
       }
     },
+    "/version": {
+      "get": {
+        "operationId": "VersionController_getVersion",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success; the envelope wraps the documented data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "description": "HTTP status code mirrored in the body.",
+                      "example": 200
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable status message.",
+                      "example": "OK"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "commit"
+                      ],
+                      "properties": {
+                        "commit": {
+                          "type": "string",
+                          "nullable": true,
+                          "pattern": "^[a-fA-F0-9]{40}$",
+                          "description": "Full Git commit identifier, or null when unavailable.",
+                          "example": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-IP rate limit exceeded (global throttle or the stricter auth window).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ],
+        "summary": "Deployed source identity",
+        "description": "Returns the configured build commit (BUILD_SHA or Render RENDER_GIT_COMMIT). A null commit means identity is unavailable. No environment values or credentials are exposed.",
+        "security": []
+      }
+    },
     "/api/v1/auth/register": {
       "post": {
         "operationId": "AuthController_register",
@@ -4955,7 +5021,7 @@
           "Payments"
         ],
         "summary": "Start a QR payment for an invoice",
-        "description": "Creates a PENDING payment transaction with a unique order reference and gateway checkout/QR payload (30-minute QR expiry). Ownership guard: ADMIN/STUDENT own, PARENT linked children. Only UNPAID/OVERDUE invoices are payable (409); the receiving bank account must be configured (409). Instructors have no money surface.\n\n**Roles:** ADMIN, STUDENT, PARENT.",
+        "description": "Creates a PENDING payment transaction with a unique order reference and gateway checkout/QR payload (30-minute QR expiry). Replacement requests are serialized per invoice; each supersedes older pending attempts. Ownership guard: ADMIN/STUDENT own, PARENT linked children. Only UNPAID/OVERDUE invoices are payable (409); the receiving bank account must be configured (409). Instructors have no money surface.\n\n**Roles:** ADMIN, STUDENT, PARENT.",
         "security": [
           {
             "bearer": []
@@ -5021,8 +5087,18 @@
                         },
                         "flagged": {
                           "type": "boolean",
-                          "description": "True when the event was processed but flagged (amount mismatch → DISPUTED).",
+                          "description": "True when a received transfer requires reconciliation and is marked DISPUTED.",
                           "example": false
+                        },
+                        "overpaid": {
+                          "type": "boolean",
+                          "description": "True when accepted settlements would exceed the invoice total.",
+                          "example": false
+                        },
+                        "totalSettled": {
+                          "type": "integer",
+                          "description": "Attempted aggregate settled amount when overpayment is detected (VND).",
+                          "example": 800000
                         }
                       }
                     }
@@ -5040,13 +5116,33 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Unknown resource or one owned by someone else — foreign ids answer the same uniform 404 so ids cannot be probed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Transactional processing failed; retry the same signed event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         },
         "tags": [
           "Payments"
         ],
         "summary": "Payment gateway webhook (public, HMAC-signed)",
-        "description": "PUBLIC webhook — authentication is the HMAC signature over the RAW request body, not a JWT. A bad signature answers 401 so the gateway retries; everything else answers 200 to stop retries (unknown orders and malformed-but-signed events are 200 no-ops). Processing is idempotent: the gateway transaction id is claimed exactly once, so duplicate/parallel deliveries never double-settle. A signed amount mismatch marks the payment DISPUTED and never marks the invoice paid; a matching SUCCESS amount settles the invoice once SUCCESS transactions cover the total.",
+        "description": "PUBLIC webhook authenticated by HMAC over the RAW body. Invalid signatures return 401. Unknown orders and signed malformed events are 200 no-ops. Database/transaction failures return 5xx so the provider can retry; claims and settlement roll back together. All receipt transitions serialize per invoice. Duplicate transaction IDs are idempotent. Amount mismatches, expired QR receipts and receipts for cancelled/refunded invoices become DISPUTED for manual reconciliation. Excess settlement is flagged; it never silently increases accepted SUCCESS totals beyond the invoice total.",
         "security": []
       }
     },
@@ -5283,7 +5379,7 @@
           "Payments"
         ],
         "summary": "Refund or dispute a payment (ADMIN)",
-        "description": "Marks a SUCCESS payment REFUNDED or DISPUTED (wrong transfer). Only SUCCESS payments qualify (409). The invoice status is re-derived: after a refund the invoice flips back to UNPAID unless another settlement still covers the total.\n\n**Roles:** ADMIN.",
+        "description": "Records an externally completed refund or flags a successful receipt for review. This API does not initiate a bank transfer. SUCCESS receipts may be marked REFUNDED or DISPUTED; DISPUTED receipts may be marked REFUNDED. Other transitions return 409. Invoice status is recomputed under the same invoice lock; history is retained and webhook replay cannot change a REFUNDED receipt.\n\n**Roles:** ADMIN.",
         "security": [
           {
             "bearer": []
@@ -13044,7 +13140,7 @@
           "description": {
             "type": "string",
             "description": "Line item description.",
-            "example": "Học phí tháng 9/2026"
+            "example": "Tuition for September 2026"
           },
           "quantity": {
             "type": "number",
@@ -13053,7 +13149,7 @@
           },
           "unitAmount": {
             "type": "number",
-            "description": "Unit price in VND (integer); amount = quantity × unitAmount.",
+            "description": "Unit price in VND (integer). Each quantity × unitAmount and the invoice subtotal must not exceed 2147483647 VND; exceeding either bound returns 400.",
             "example": 400000
           }
         },
@@ -13083,7 +13179,7 @@
             "example": "OTHER"
           },
           "items": {
-            "description": "Line items (1..50).",
+            "description": "Line items (1..50). The sum of line amounts must not exceed 2147483647 VND.",
             "maxItems": 50,
             "type": "array",
             "items": {
@@ -13103,7 +13199,7 @@
           "note": {
             "type": "string",
             "description": "Free-text note shown on the invoice.",
-            "example": "Võ phục mới"
+            "example": "New club uniform"
           },
           "periodMonth": {
             "type": "number",
@@ -13117,7 +13213,7 @@
           },
           "discountCode": {
             "type": "string",
-            "description": "Active discount code (\"khuyến mãi\") resolved at creation time; its discount is added to any manual discount.",
+            "description": "Active discount code resolved at creation time; its discount is added to any manual discount.",
             "example": "TET2026"
           }
         },
@@ -13321,7 +13417,7 @@
         "properties": {
           "status": {
             "type": "string",
-            "description": "REFUNDED returns the money; DISPUTED marks the transfer as contested. Only SUCCESS payments qualify.",
+            "description": "REFUNDED records an externally completed refund; this API does not initiate a bank transfer. SUCCESS or DISPUTED receipts may be refunded. Only SUCCESS receipts may be marked DISPUTED.",
             "enum": [
               "REFUNDED",
               "DISPUTED"

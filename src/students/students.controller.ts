@@ -51,8 +51,8 @@ export class StudentsController {
 
   @Post()
   @Roles('ADMIN')
-  create(@Body() dto: CreateStudentDto) {
-    return this.students.create(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateStudentDto) {
+    return this.students.create(user, dto);
   }
 
   @Get(':id')
@@ -62,20 +62,30 @@ export class StudentsController {
 
   @Patch(':id')
   @Roles('ADMIN')
-  update(@Param('id', ParseUuidPipe) id: string, @Body() dto: UpdateStudentDto) {
-    return this.students.update(id, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+    @Body() dto: UpdateStudentDto,
+  ) {
+    return this.students.update(user, id, dto);
   }
 
   @Delete(':id')
   @Roles('ADMIN')
-  async softDelete(@Param('id', ParseUuidPipe) id: string): Promise<{ deleted: boolean }> {
-    return this.students.softDelete(id);
+  async softDelete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+  ): Promise<{ deleted: boolean }> {
+    return this.students.softDelete(user, id);
   }
 
   @Post(':id/invite-code')
   @Roles('ADMIN')
   @HttpCode(200)
-  regenerateInviteCode(@Param('id', ParseUuidPipe) id: string) {
-    return this.students.regenerateInviteCode(id);
+  regenerateInviteCode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+  ) {
+    return this.students.regenerateInviteCode(user, id);
   }
 }

@@ -90,7 +90,7 @@ export class StudentsService {
    * ADMIN: creates a profile and returns the single-use invite code for the parent
    * (plan 7.1). Minors never self-register, so no age validation blocks this path.
    */
-  async create(dto: CreateStudentDto): Promise<Record<string, unknown>> {
+  async create(caller: AuthenticatedUser, dto: CreateStudentDto): Promise<Record<string, unknown>> {
     let userId: string | undefined;
     if (dto.linkedUserEmail !== undefined) {
       const user = await this.prisma.user.findUnique({ where: { email: dto.linkedUserEmail } });
@@ -126,6 +126,7 @@ export class StudentsService {
     });
     this.audit.record({
       event: 'student_profile_created',
+      userId: caller.id,
       success: true,
       detail: `student_profile:${profile.id}`,
     });
@@ -196,7 +197,11 @@ export class StudentsService {
   }
 
   /** ADMIN only (plan 8): full-field edit incl. approval (PENDING -> ACTIVE). */
-  async update(studentId: string, dto: UpdateStudentDto): Promise<Record<string, unknown>> {
+  async update(
+    caller: AuthenticatedUser,
+    studentId: string,
+    dto: UpdateStudentDto,
+  ): Promise<Record<string, unknown>> {
     const existing = await this.prisma.studentProfile.findFirst({
       where: { id: studentId, deletedAt: null },
     });
@@ -223,6 +228,7 @@ export class StudentsService {
     });
     this.audit.record({
       event: 'student_profile_updated',
+      userId: caller.id,
       success: true,
       detail: `student_profile:${studentId}`,
     });
@@ -230,7 +236,7 @@ export class StudentsService {
   }
 
   /** ADMIN: soft delete only (plan 7.2) — invoices stay, profile leaves all queries. */
-  async softDelete(studentId: string): Promise<{ deleted: boolean }> {
+  async softDelete(caller: AuthenticatedUser, studentId: string): Promise<{ deleted: boolean }> {
     const updated = await this.prisma.studentProfile.updateMany({
       where: { id: studentId, deletedAt: null },
       data: { deletedAt: new Date() },
@@ -245,6 +251,7 @@ export class StudentsService {
     });
     this.audit.record({
       event: 'student_profile_deleted',
+      userId: caller.id,
       success: true,
       detail: `student_profile:${studentId}`,
     });
@@ -252,7 +259,10 @@ export class StudentsService {
   }
 
   /** ADMIN: replaces the invite code; the old code stops working immediately (plan 8). */
-  async regenerateInviteCode(studentId: string): Promise<Record<string, unknown>> {
+  async regenerateInviteCode(
+    caller: AuthenticatedUser,
+    studentId: string,
+  ): Promise<Record<string, unknown>> {
     const existing = await this.prisma.studentProfile.findFirst({
       where: { id: studentId, deletedAt: null },
     });
@@ -265,6 +275,7 @@ export class StudentsService {
     });
     this.audit.record({
       event: 'student_invite_regenerated',
+      userId: caller.id,
       success: true,
       detail: `student_profile:${studentId}`,
     });

@@ -3,7 +3,7 @@
 Single source of truth for cross-session handoff (see the execution prompt and `docs/PLAN.md`).
 Read this file and `git log` before writing any code. Update it after every completed task or before stopping.
 
-Current status: **P0–P5 ALL MERGED (PRs through #26). TASK-06 FINAL QA (2026-09-24): RELEASE READY WITH DOCUMENTED LIMITATIONS. PRE-DEPLOY HARDENING PASS (2026-09-25): auth-surface limiter + noindex header + `docs/DEPLOY_RENDER.md`. MATRIX-COMPLETION INCREMENT (2026-09-25, branch `feat/matrix-completion`): every thesis permission-matrix row now implemented — admin user/instructor management (`GET/POST /users`, `PATCH/DELETE /users/:id` — role change/password reset/deactivation revoke sessions + bump pwd_version), system settings API (`GET /admin/billing/settings`, `PUT tuition-rates` / `bank-account`), leave-request flow (`leave_requests` table + create/list/review/cancel/delete), promotion proposals (`promotion_proposals`, propose→approve, advisory only), student evaluations (`student_evaluations`), discount codes (`discount_codes` + application at invoice creation), belt-history endpoint (`GET /exam-registrations?studentId=`), student self-edit (`PATCH /students/me`, contact fields), admin audit view (`GET /admin/audit-log`), 3 reports (attendance / tuition / belts with role scoping), instructor class-scoped announcements. Contract **88 paths / 111 operations**; migration `20260924232722` → **29 tables** (CI-asserted); demo dataset via `SEED_DEMO_DATA=true npm run seed` (idempotent, password Demo#2026). Gates 2026-09-25: format/lint/typecheck/build ✓, unit **359/359 (71 suites)** ✓, e2e+security **100/100 (17 suites)** ✓, spectral 0 errors ✓, npm audit 0 ✓. Owner actions unchanged: merge PRs, Render deployment per DEPLOY_RENDER.md, payOS sandbox credentials, backup drill, legal verifications.**
+Current status (2026-10-05): acceptance remediation is implemented on codex/acceptance-remediation. Eight confirmed defects repaired; 448 unit and 107 integration/security tests pass with unchanged coverage gates, nine migrations replay cleanly, dependency audit has zero vulnerabilities and OpenAPI contains 89 paths / 112 operations. CI, exact Render commit deployment and authenticated hosted UAT remain separate acceptance checks; see docs/BACKEND_REMEDIATION.md. Earlier release-ready statements below are historical and do not replace current evidence.
 
 ## Phase task table
 
@@ -32,6 +32,14 @@ Current status: **P0–P5 ALL MERGED (PRs through #26). TASK-06 FINAL QA (2026-0
 | P7 go-live | Deployment trial, backup/DR, real-gateway demo, legal verifications | BLOCKED (owner actions) | No `RENDER_DEPLOY_HOOK`/`SMOKE_TEST_URL` secrets, no hosting service, no payOS credentials, no PITR/restore drill; legal/accounting items require named human verification (docs/SECURITY.md §10). Application-side readiness verified by TASK-06 |
 
 ## Handoff log
+
+### 2026-10-05 — Acceptance remediation
+
+- Fixed D1-D8 from the final acceptance report: invoice locks for concurrent settlement/QR replacement, structured student audit actor, retained idempotent audit retry, SMTP error propagation, fail-closed scanner gate, vulnerable dependencies and integer monetary validation.
+- Added notification leases and shutdown draining, additive reliability migration, deployment commit identity and exact-commit smoke gate, non-root startup migrations, configurable trusted proxy hops, non-destructive restore script and Render/VPS operations documentation.
+- Validation: 448/448 unit with coverage, 107/107 PostgreSQL integration/security, 15/15 UAT helper tests, 5/5 CI helper tests; OpenAPI/Spectral zero diagnostics; npm audit zero vulnerabilities; Trivy configured HIGH/CRITICAL zero findings; synthetic restore counts match for 29 tables in 3 seconds and populated target is refused.
+- Hosted authenticated acceptance remains blocked on legitimate provisioning access; no auth bypass, live role promotion or live synthetic resource creation occurred. Release evidence is tracked in docs/BACKEND_REMEDIATION.md.
+
 
 ### 2026-09-28 — Session 30: TASK-09 — Repair Confirmed Post-Repair Forensic Findings
 - **Objective:** Repair all confirmed findings from `docs/POST_REPAIR_FORENSIC_VERIFICATION.md` (R1, R5, R6, R8, R9, R4, R13) across payment transaction recovery, UAT report generator honesty, CI deployment gates, script credential hygiene, and architectural documentation.

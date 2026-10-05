@@ -16,11 +16,12 @@ type Row = {
   error: string | null;
   nextAttemptAt: Date | null;
   createdAt: Date;
+  claimedAt: Date | null;
 };
 
 function makePrismaMock() {
   const rows: Row[] = [];
-  return {
+  const prismaForTransaction = {
     rows,
     notification: {
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -28,21 +29,35 @@ function makePrismaMock() {
         ...data,
       })),
       updateMany: jest.fn(
-        async ({ where, data }: { where: { status?: string }; data: { status?: string } }) => {
+        async ({
+          where,
+          data,
+        }: {
+          where: { status?: string; id?: string; OR?: unknown };
+          data: Partial<Row>;
+        }) => {
           let moved = 0;
           for (const row of rows) {
             if (where.status !== undefined && row.status !== where.status) {
               continue;
             }
-            if (data.status !== undefined) {
-              row.status = data.status;
-            }
+            if (where.id !== undefined && row.id !== where.id) continue;
+            if (
+              where.OR !== undefined &&
+              (row.claimedAt ?? row.createdAt).getTime() >= Date.now() - 10 * 60_000
+            )
+              continue;
+            Object.assign(row, data);
             moved += 1;
           }
           return { count: moved };
         },
       ),
       findMany: jest.fn(async () => rows.filter((row) => row.status === 'SENDING')),
+      findUnique: jest.fn(
+        async ({ where }: { where: { id: string } }) =>
+          rows.find((row) => row.id === where.id) ?? null,
+      ),
       update: jest.fn(async ({ where, data }: { where: { id: string }; data: Partial<Row> }) => {
         const row = rows.find((candidate) => candidate.id === where.id);
         if (row !== undefined) {
@@ -51,8 +66,21 @@ function makePrismaMock() {
         return row;
       }),
     },
-    $transaction: jest.fn(),
+    $queryRaw: jest.fn(async () =>
+      rows
+        .filter(
+          (row) =>
+            row.status === 'QUEUED' &&
+            (row.nextAttemptAt === null || row.nextAttemptAt <= new Date()),
+        )
+        .slice(0, 1)
+        .map((row) => ({ id: row.id })),
+    ),
+    $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> =>
+      callback(prismaForTransaction),
+    ),
   };
+  return prismaForTransaction;
 }
 
 type PrismaMock = ReturnType<typeof makePrismaMock>;
@@ -89,6 +117,7 @@ function queuedRow(overrides: Partial<Row> = {}): Row {
     error: null,
     nextAttemptAt: null,
     createdAt: new Date(),
+    claimedAt: null,
     ...overrides,
   };
 }
@@ -168,7 +197,7 @@ describe('NotificationOutboxService', () => {
     expect(sms).toHaveBeenCalledTimes(1);
     expect(mail).toHaveBeenCalledTimes(1);
     expect(firstRow().status).toBe('SENT');
-    expect((firstRow().payload as { deliveredVia?: string }).deliveredVia).toBe('ZNS');
+    expect((firstRow().payload as { deliveredVia?: string }).deliveredVia).toBe('EMAIL');
   });
 
   it('records a transient failure with backoff and returns the row to QUEUED', async () => {
@@ -178,7 +207,7 @@ describe('NotificationOutboxService', () => {
     const row = firstRow();
     expect(row.status).toBe('QUEUED');
     expect(row.retries).toBe(1);
-    expect(row.error).toBe('smtp down');
+    expect(row.error).toBe('Notification delivery failed');
     expect(row.nextAttemptAt).toBeInstanceOf(Date);
   });
 
@@ -198,7 +227,7 @@ describe('NotificationOutboxService', () => {
     const row = firstRow();
     expect(row.status).toBe('QUEUED');
     expect(row.retries).toBe(1);
-    expect(row.error).toBe('missing payload.email recipient');
+    expect(row.error).toBe('Notification delivery failed');
   });
 
   it('requeues stale SENDING rows before claiming (crashed pass recovery)', async () => {
@@ -217,6 +246,55 @@ describe('NotificationOutboxService', () => {
     const row = firstRow();
     expect(row.status).toBe('QUEUED');
     expect(row.retries).toBe(1);
-    expect(row.error).toBe('no delivery channel available');
+    expect(row.error).toBe('No delivery channel configured');
+  });
+
+  it('does not recover an old message whose worker lease is still fresh', async () => {
+    prisma.rows.push(
+      queuedRow({
+        status: 'SENDING',
+        createdAt: new Date(Date.now() - 60 * 60_000),
+        claimedAt: new Date(),
+      }),
+    );
+    await service.runOnce();
+    expect(firstRow().status).toBe('SENDING');
+    expect(mail).not.toHaveBeenCalled();
+  });
+
+  it('does not claim a message before its retry deadline', async () => {
+    prisma.rows.push(queuedRow({ nextAttemptAt: new Date(Date.now() + 60_000) }));
+    await service.runOnce();
+    expect(firstRow().status).toBe('QUEUED');
+    expect(mail).not.toHaveBeenCalled();
+  });
+
+  it('waits for the active send on shutdown and starts no new work', async () => {
+    let finish: (() => void) | undefined;
+    let started: (() => void) | undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    mail.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+          started?.();
+        }),
+    );
+    prisma.rows.push(queuedRow());
+    const pass = service.runOnce();
+    await sendStarted;
+    let closed = false;
+    const close = service.onModuleDestroy().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    expect(closed).toBe(false);
+    finish?.();
+    await Promise.all([pass, close]);
+    expect(firstRow().status).toBe('SENT');
+    await service.runOnce();
+    expect(mail).toHaveBeenCalledTimes(1);
   });
 });

@@ -24,7 +24,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "seed": "prisma db seed",
     "openapi:generate": "ts-node scripts/generate-openapi.ts",
-    "contract:lint": "spectral lint openapi.json --fail-severity=error"
+    "contract:lint": "node scripts/lint-openapi.cjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -60,9 +60,8 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
-    "@stoplight/spectral-cli": "^6.16.3",
     "@types/express": "^5.0.0",
-    "@types/jest": "^29.5.14",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.0",
     "@types/nodemailer": "^8.0.2",
@@ -71,22 +70,27 @@
     "@usebruno/cli": "^4.2.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^9.1.0",
-    "jest": "^29.7.0",
+    "jest": "^30.5.2",
     "license-checker": "^25.0.1",
     "prettier": "^3.4.2",
     "supertest": "^7.0.0",
-    "ts-jest": "^29.2.5",
+    "ts-jest": "^29.4.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "@stoplight/spectral-core": "^1.24.0",
+    "@stoplight/spectral-rulesets": "^1.23.0",
+    "@stoplight/spectral-parsers": "^1.0.5",
+    "js-yaml": "^4.3.2"
   },
   "overrides": {
-    "multer": "^2.3.0",
+    "multer": "^2.4.0",
     "@usebruno/cli": {
       "form-data": "^4.0.6",
       "js-yaml": "^4.3.2",
       "@faker-js/faker": "^10.5.0",
-      "yaml": "^2.8.3"
+      "yaml": "^2.8.3",
+      "csv-parse": "^7.0.2"
     },
     "@usebruno/converters": {
       "js-yaml": "^4.3.2"
@@ -99,6 +103,11 @@
     },
     "@usebruno/js": {
       "yaml": "^2.8.3"
+    },
+    "axios": "^1.20.0",
+    "uuid": "^11.1.1",
+    "@nestjs/swagger": {
+      "js-yaml": "^4.3.2"
     }
   },
   "allowScripts": {

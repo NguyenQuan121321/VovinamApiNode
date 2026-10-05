@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../auth/audit/audit.service';
 import { NotificationOutboxService } from '../notifications/notification-outbox.service';
 import { nextSequentialCode } from './sequential-code';
+import { assertMoneyAmount } from './money';
 import type { AuthenticatedUser } from '../auth/guards/authenticated-request';
 import type { CreateInvoiceDto, GenerateMonthlyDto, ListInvoicesQueryDto } from './dto/billing.dto';
 import type { CreateDiscountCodeDto, UpdateDiscountCodeDto } from './dto/settings.dto';
@@ -194,12 +195,15 @@ export class BillingService {
     } else if (dto.periodMonth !== undefined || dto.periodYear !== undefined) {
       throw new BadRequestException('Only tuition invoices carry a billing period');
     }
-    const subtotal = dto.items.reduce((sum, item) => sum + item.quantity * item.unitAmount, 0);
+    const subtotal = dto.items.reduce(
+      (sum, item) => assertMoneyAmount(sum + assertMoneyAmount(item.quantity * item.unitAmount)),
+      0,
+    );
     let discount = dto.discount ?? 0;
     let appliedCode: string | null = null;
     if (dto.discountCode !== undefined && dto.discountCode !== '') {
       const codeDiscount = await this.resolveDiscountCode(dto.discountCode, subtotal);
-      discount += codeDiscount;
+      discount = assertMoneyAmount(discount + codeDiscount);
       appliedCode = dto.discountCode.toUpperCase();
     }
     if (discount > subtotal) {
