@@ -12,7 +12,7 @@ Date: 2026-10-05. Source branch: codex/acceptance-remediation. Baseline: 1e174e8
 | D4: failed audit batch lost | Retain batches, retry stable event UUIDs with duplicate suppression and sanitized failure logging | Injected first DB failure, second flush persists the original event once |
 | D5: SMTP failure marked SENT | Propagate sanitized SMTP failures; outbox increments retries and schedules backoff | SMTP fault injection remains QUEUED with retry count 1, not SENT |
 | D6: scanner errors could pass | Require successful exit plus explicit empty findings and errors arrays | Fatal error, nonzero exit, findings and malformed/missing report regressions fail |
-| D7: dependency advisories | Patch dependency tree; migrate Jest 30; replace Spectral CLI with official SDK using existing rules | Clean npm ci and npm audit: zero vulnerabilities; Bruno CLI version/help and Spectral quality smoke checks |
+| D7: dependency advisories | Patch dependency tree; migrate Jest 30; replace Spectral CLI with official SDK using existing rules | Clean npm ci and npm audit: zero vulnerabilities; Bruno CLI version/help, live local HTTP and CSV-driven requests, plus Spectral quality checks |
 | D8: valid DTO monetary multiplication causes DB overflow | Validate line products and aggregate subtotal/discount against integer storage bounds | Oversized product and combined subtotal return controlled HTTP 400 |
 
 Additional safeguards: late/expired receipts remain disputed for reconciliation; disputed receipts can be recorded refunded by an authorized MFA administrator; terminal refunded state survives callback replay. Notification claims use lease timestamps, eligible-row locks, real fallback channel metadata and shutdown draining. Database disconnect happens after module drains. SMTP transport waits are bounded. Logs omit mail recipients, bodies and raw provider errors.
@@ -29,6 +29,7 @@ Additional safeguards: late/expired receipts remain disputed for reconciliation;
 - Docker: non-root runtime, migration on startup, health/readiness/version HTTP 200; SIGTERM exits 0 without OOM. Local image uses the baseline SHA as a smoke-test build argument and is not evidence of a released source identity.
 - Gitleaks source snapshot: version 8.30.1, zero leaks; full Git history is checked independently in CI.
 - Semgrep source snapshot: pinned version 1.178.0; 144 rules, zero findings and zero scanner errors. Exit/report integrity gate passed.
+- Build context excludes ignored temporary runtime files to prevent local credentials/test captures entering builder layers.
 - Container scan: pinned Trivy 0.74.0, configured HIGH/CRITICAL policy with unfixed excluded and bundled npm skipped as in CI: zero findings. This is not a claim that all unfixed vulnerabilities are absent.
 - Restore drill: isolated synthetic database restored in 3 seconds; counts match across all 29 tables. A populated restore target is rejected. No live data was restored or overwritten.
 - Adapter fault injection: audit retry, failed SMTP/outbox retry and invalid production configuration all passed.

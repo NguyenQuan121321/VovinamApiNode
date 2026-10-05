@@ -129,5 +129,14 @@
     "version": "8.30.1",
     "sourceSnapshotLeaks": 0,
     "fullHistory": "CI pending"
+  },
+  "bruno": {
+    "version": "4.2.0",
+    "runtimeRequests": 1,
+    "runtimeTests": 2,
+    "csvIterations": 2,
+    "csvRequests": 2,
+    "csvTests": 4,
+    "allPassed": true
   }
 }

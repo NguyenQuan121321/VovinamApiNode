@@ -36,7 +36,7 @@ Production validation rejects simulated payments, missing encryption/metrics con
 
 ## Administrator provisioning
 
-The existing privileged provisioning path is `npm run seed` with runtime-only `ADMIN_EMAIL` and `ADMIN_PASSWORD`, executed by an authorized operator with database access. It creates a verified ADMIN and does not update an existing account. Self-registration allows STUDENT and PARENT only. No public ADMIN bootstrap endpoint exists.
+The existing privileged provisioning path is `npm run seed` with runtime-only `ADMIN_EMAIL` and `ADMIN_PASSWORD`, executed by an authorized operator with database access from the checked-out repository after `npm ci`. The seed uses the development TypeScript runner; the minimal production image does not include that runner. It creates a verified ADMIN and does not update an existing account. Self-registration allows STUDENT and PARENT only. No public ADMIN bootstrap endpoint exists.
 
 Use a unique synthetic email for acceptance, leave `SEED_DEMO_DATA` unset and inspect any collision before continuing. Authenticate normally and enroll TOTP through the normal MFA endpoints before admin business endpoints become available. The verified email on a seeded administrator is an intentional property of privileged provisioning; public users still require verification. Never promote a self-registered user directly or disable MFA to run acceptance.
 

@@ -27,7 +27,7 @@ export interface Env {
   CORS_ALLOWED_ORIGINS: string[];
   SWAGGER_ENABLED: boolean;
   METRICS_TOKEN?: string;
-  /** logging (default) keeps outbound mail in the pino log; smtp delivers via nodemailer. */
+  /** logging records template metadata only; smtp delivers via nodemailer. */
   MAIL_DRIVER: 'logging' | 'smtp';
   /**
    * Test-only capture file for LoggingMailSender (writes full messages incl.
