@@ -69,6 +69,12 @@ export class PaymentsService {
     });
 
     const txn = await this.prisma.$transaction(async (tx) => {
+      await this.lockInvoice(tx, invoiceId);
+      const current = await tx.invoice.findUnique({ where: { id: invoiceId } });
+      if (current === null) throw new NotFoundException('Not found');
+      if (current.status !== 'UNPAID' && current.status !== 'OVERDUE') {
+        throw new ConflictException('Invoice is not payable');
+      }
       // Invalidate/expire any existing PENDING payment for this invoice before creating a new one (R6)
       await tx.paymentTransaction.updateMany({
         where: {
@@ -95,6 +101,7 @@ export class PaymentsService {
     });
 
     this.audit.record({
+      userId: caller.id,
       event: 'payment_created',
       success: true,
       detail: `payment:${txn.id} invoice:${invoiceId} order_ref:${orderRef}`,
@@ -111,8 +118,9 @@ export class PaymentsService {
   }
 
   /**
-   * Public gateway webhook. Signature first (401 stops the provider), then
-   * everything else answers 200 so the gateway never retries a processed event.
+   * Public gateway webhook. Invalid signatures receive 401. Processed,
+   * duplicate and unrecognized signed events receive 200; storage failures
+   * remain retryable server errors.
    * Atomically claims and settles inside one transaction so failures can be
    * retried safely without stranding payments (R5, R6).
    */
@@ -142,7 +150,7 @@ export class PaymentsService {
     }
 
     // Idempotency: duplicate delivery of an already succeeded payment returns 200 no-op
-    if (txn.status === 'SUCCESS' || txn.status === 'DISPUTED') {
+    if (txn.status === 'SUCCESS' || txn.status === 'DISPUTED' || txn.status === 'REFUNDED') {
       return { processed: false };
     }
     if (txn.status === 'FAILED' && txn.gatewayTxnId === event.gatewayTxnId) {
@@ -151,14 +159,13 @@ export class PaymentsService {
 
     // Gateway reported failure: atomically transition to FAILED
     if (!event.success) {
-      await this.prisma.paymentTransaction.update({
-        where: { id: txn.id },
-        data: {
-          status: 'FAILED',
-          gatewayTxnId: event.gatewayTxnId,
-          note: 'Gateway reported a failed transfer',
-        },
-      });
+      const changed = await this.transitionReceipt(
+        txn,
+        event.gatewayTxnId,
+        'FAILED',
+        'Gateway reported a failed transfer',
+      );
+      if (!changed) return { processed: false };
       this.audit.record({
         event: 'payment_failed',
         success: true,
@@ -169,14 +176,13 @@ export class PaymentsService {
 
     // Amount mismatch: S-11 exact amount rule -> mark DISPUTED
     if (event.amount !== txn.amount) {
-      await this.prisma.paymentTransaction.update({
-        where: { id: txn.id },
-        data: {
-          status: 'DISPUTED',
-          gatewayTxnId: event.gatewayTxnId,
-          note: `Amount mismatch: expected ${txn.amount}, received ${event.amount}`,
-        },
-      });
+      const changed = await this.transitionReceipt(
+        txn,
+        event.gatewayTxnId,
+        'DISPUTED',
+        `Amount mismatch: expected ${txn.amount}, received ${event.amount}`,
+      );
+      if (!changed) return { processed: false };
       this.audit.record({
         event: 'payment_flagged',
         success: false,
@@ -192,6 +198,30 @@ export class PaymentsService {
         | { processed: true; outcome: 'SUCCESS' };
 
       const result = await this.prisma.$transaction(async (tx): Promise<SettlementResult> => {
+        await this.lockInvoice(tx, txn.invoiceId);
+        const expired = await tx.paymentTransaction.findFirst({
+          where: {
+            id: txn.id,
+            status: { in: ['PENDING', 'FAILED'] },
+            expiresAt: { lte: new Date() },
+          },
+        });
+        if (expired !== null) {
+          const flagged = await tx.paymentTransaction.updateMany({
+            where: {
+              id: txn.id,
+              status: { in: ['PENDING', 'FAILED'] },
+              OR: [{ gatewayTxnId: null }, { gatewayTxnId: event.gatewayTxnId }],
+            },
+            data: {
+              status: 'DISPUTED',
+              gatewayTxnId: event.gatewayTxnId,
+              paidAt: new Date(),
+              note: 'Transfer received after QR expiration; requires manual reconciliation',
+            },
+          });
+          return flagged.count > 0 ? { processed: false, flagged: true } : { processed: false };
+        }
         // Atomic claim: only claim if status is PENDING (or superseded) and gatewayTxnId is either null or this retry's gatewayTxnId
         const claimed = await tx.paymentTransaction.updateMany({
           where: {
@@ -214,6 +244,17 @@ export class PaymentsService {
         const invoice = await tx.invoice.findUnique({ where: { id: txn.invoiceId } });
         if (invoice === null) {
           throw new NotFoundException('Not found');
+        }
+
+        if (invoice.status === 'CANCELLED' || invoice.status === 'REFUNDED') {
+          await tx.paymentTransaction.update({
+            where: { id: txn.id },
+            data: {
+              status: 'DISPUTED',
+              note: 'Transfer received for a non-payable invoice; requires manual reconciliation',
+            },
+          });
+          return { processed: false, flagged: true };
         }
 
         // Sum all SUCCESS payments for this invoice
@@ -262,7 +303,7 @@ export class PaymentsService {
         this.audit.record({
           event: 'payment_flagged',
           success: false,
-          detail: `payment:${txn.id} invoice:${txn.invoiceId} overpayment: expected ${txn.amount}, total settled ${result.totalSettled ?? 0}`,
+          detail: `payment:${txn.id} invoice:${txn.invoiceId} reconciliation_required total_settled:${result.totalSettled ?? 0}`,
         });
       }
 
@@ -287,6 +328,9 @@ export class PaymentsService {
       throw new NotFoundException('Not found');
     }
     const txn = await this.prisma.$transaction(async (tx) => {
+      await this.lockInvoice(tx, invoiceId);
+      const current = await tx.invoice.findUnique({ where: { id: invoiceId } });
+      if (current === null) throw new NotFoundException('Not found');
       const claimed = await tx.invoice.updateMany({
         where: { id: invoiceId, status: { in: ['UNPAID', 'OVERDUE'] } },
         data: { status: 'PAID' },
@@ -308,6 +352,7 @@ export class PaymentsService {
       });
     });
     this.audit.record({
+      userId: caller.id,
       event: 'payment_confirmed_cash',
       success: true,
       detail: `payment:${txn.id} invoice:${invoiceId} amount:${txn.amount} admin:${caller.id}`,
@@ -323,6 +368,8 @@ export class PaymentsService {
     note?: string,
   ): Promise<Record<string, unknown>> {
     const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT i.id FROM "invoices" i JOIN "payment_transactions" p
+        ON p.invoice_id = i.id WHERE p.id = ${paymentId}::uuid FOR UPDATE OF i`;
       const txn = await tx.paymentTransaction.findUnique({
         where: { id: paymentId },
         select: { id: true, invoiceId: true, status: true, note: true },
@@ -330,8 +377,10 @@ export class PaymentsService {
       if (txn === null) {
         throw new NotFoundException('Not found');
       }
-      if (txn.status !== 'SUCCESS') {
-        throw new ConflictException('Only successful payments can be refunded or disputed');
+      if (txn.status !== 'SUCCESS' && !(txn.status === 'DISPUTED' && status === 'REFUNDED')) {
+        throw new ConflictException(
+          'Only successful payments can be disputed; successful or disputed receipts can be refunded',
+        );
       }
       const result = await tx.paymentTransaction.update({
         where: { id: paymentId },
@@ -341,6 +390,7 @@ export class PaymentsService {
       return result;
     });
     this.audit.record({
+      userId: caller.id,
       event: status === 'REFUNDED' ? 'payment_refunded' : 'payment_flagged',
       success: true,
       detail: `payment:${paymentId} admin:${caller.id} note:${note ?? ''}`.slice(0, 500),
@@ -369,6 +419,42 @@ export class PaymentsService {
       items: payments.map((payment) => this.serializePayment(payment)),
       total: payments.length,
     };
+  }
+
+  /** Serializes all money transitions for one invoice. */
+  private async lockInvoice(tx: Prisma.TransactionClient, invoiceId: string): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM "invoices" WHERE id = ${invoiceId}::uuid FOR UPDATE`;
+  }
+
+  private async transitionReceipt(
+    payment: { id: string; invoiceId: string },
+    gatewayTxnId: string,
+    status: 'FAILED' | 'DISPUTED',
+    note: string,
+  ): Promise<boolean> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.lockInvoice(tx, payment.invoiceId);
+        const claimed = await tx.paymentTransaction.updateMany({
+          where: {
+            id: payment.id,
+            status: { in: ['PENDING', 'FAILED'] },
+            OR: [{ gatewayTxnId: null }, { gatewayTxnId }],
+          },
+          data: { gatewayTxnId },
+        });
+        if (claimed.count === 0) return false;
+        await tx.paymentTransaction.update({
+          where: { id: payment.id },
+          data: { status, gatewayTxnId, note },
+        });
+        return true;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        return false;
+      throw error;
+    }
   }
 
   /** Re-derives UNPAID/PAID after a refund or dispute; OVERDUE only flips to PAID. */

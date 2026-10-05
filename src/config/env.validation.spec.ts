@@ -31,6 +31,13 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...valid, JWT_SECRET: 'too-short' })).toThrow(/JWT_SECRET/);
   });
 
+  it('validates deployment identity and trusted proxy bounds', () => {
+    expect(() => validateEnv({ ...valid, BUILD_SHA: 'not-a-commit' })).toThrow(/BUILD_SHA/);
+    expect(() => validateEnv({ ...valid, TRUST_PROXY_HOPS: 99 })).toThrow(/TRUST_PROXY_HOPS/);
+    expect(validateEnv({ ...valid, TRUST_PROXY_HOPS: 0 }).TRUST_PROXY_HOPS).toBe(0);
+    expect(validateEnv(valid).TRUST_PROXY_HOPS).toBe(1);
+  });
+
   it('requires APP_ENCRYPTION_KEY and METRICS_TOKEN in production', () => {
     expect(() => validateEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/APP_ENCRYPTION_KEY/);
     expect(() =>

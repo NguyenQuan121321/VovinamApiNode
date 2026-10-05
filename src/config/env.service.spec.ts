@@ -62,6 +62,16 @@ describe('EnvService', () => {
     expect(service.isProduction).toBe(true);
   });
 
+  it('prefers a built artifact SHA and falls back to Render metadata', () => {
+    expect(
+      makeEnvService({ ...base, BUILD_SHA: 'a'.repeat(40), RENDER_GIT_COMMIT: 'b'.repeat(40) })
+        .buildSha,
+    ).toBe('a'.repeat(40));
+    expect(
+      makeEnvService({ ...base, BUILD_SHA: '', RENDER_GIT_COMMIT: 'b'.repeat(40) }).buildSha,
+    ).toBe('b'.repeat(40));
+  });
+
   it('app config module stays loadable', () => {
     expect(new AppConfigModule()).toBeDefined();
   });

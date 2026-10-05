@@ -7,10 +7,9 @@ import type { MailMessage, MailPort } from './mail.port';
 
 /**
  * Deliverable mail adapter (plan 7.6) behind MAIL_PORT, selected by
- * MAIL_DRIVER=smtp. Delivery problems are logged, never thrown — the same
- * contract as LoggingMailSender, because security-relevant notifications
- * (new-IP login, token reuse, lockout) must not fail the request path. Message
- * bodies carry single-use tokens and are therefore never logged.
+ * MAIL_DRIVER=smtp. Failures propagate to the caller: the outbox retries,
+ * while authentication's notification boundary preserves its response posture.
+ * Recipients, message bodies and provider errors never enter logs.
  */
 @Injectable()
 export class SmtpMailSender implements MailPort {
@@ -26,6 +25,9 @@ export class SmtpMailSender implements MailPort {
       host: env.smtpHost,
       port: env.smtpPort,
       secure: env.smtpPort === 465,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
       ...(env.smtpUser !== undefined && env.smtpPassword !== undefined
         ? { auth: { user: env.smtpUser, pass: env.smtpPassword } }
         : {}),
@@ -40,19 +42,10 @@ export class SmtpMailSender implements MailPort {
         subject: message.subject,
         text: message.body,
       });
-      this.logger.info(
-        { to: message.to, template: message.templateCode, subject: message.subject },
-        'mail_sent',
-      );
-    } catch (error) {
-      this.logger.error(
-        {
-          to: message.to,
-          template: message.templateCode,
-          err: error instanceof Error ? error.message : 'unknown error',
-        },
-        'mail_send_failed',
-      );
+      this.logger.info({ template: message.templateCode }, 'mail_sent');
+    } catch {
+      this.logger.error({ template: message.templateCode }, 'mail_send_failed');
+      throw new Error('Mail delivery failed');
     }
   }
 }

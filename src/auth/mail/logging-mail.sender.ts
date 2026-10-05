@@ -17,10 +17,7 @@ export class LoggingMailSender implements MailPort {
   constructor(@Inject(APP_LOGGER) private readonly logger: Logger) {}
 
   async send(message: MailMessage): Promise<void> {
-    this.logger.info(
-      { to: message.to, template: message.templateCode, subject: message.subject },
-      'mail_logged_not_sent',
-    );
+    this.logger.info({ template: message.templateCode }, 'mail_logged_not_sent');
     const logFile = process.env.MAIL_LOG_FILE;
     if (logFile !== undefined && logFile !== '') {
       appendFileSync(logFile, `${JSON.stringify(message)}\n`, 'utf8');

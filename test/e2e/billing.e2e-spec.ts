@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap';
 import { enrollTotp } from './helpers/mfa';
+import { AuditService } from '../../src/auth/audit/audit.service';
 
 /**
  * P4 acceptance (plan 13): invoices + generate-monthly idempotency, QR payment
@@ -103,6 +104,133 @@ describe('Billing: invoices and payments (e2e)', () => {
     return (res.body.data.items as Array<{ status: string }>).filter((p) => p.status === 'SUCCESS')
       .length;
   };
+
+  it('serializes concurrent QR replacement to one pending attempt', async () => {
+    const invoiceId = await createUniformInvoice();
+    await Promise.all(Array.from({ length: 5 }, () => qrRequest(invoiceId)));
+    expect(await prisma.paymentTransaction.count({ where: { invoiceId, status: 'PENDING' } })).toBe(
+      1,
+    );
+    expect(await prisma.paymentTransaction.count({ where: { invoiceId } })).toBe(5);
+  });
+
+  it('flags a concurrent excess transfer across distinct payment attempts', async () => {
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      const invoiceId = await createUniformInvoice();
+      const first = await prisma.paymentTransaction.create({
+        data: {
+          invoiceId,
+          orderRef: `RACEA${stamp}${iteration}`,
+          gateway: 'BANK_TRANSFER',
+          amount: 200000,
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        },
+      });
+      const second = await prisma.paymentTransaction.create({
+        data: {
+          invoiceId,
+          orderRef: `RACEB${stamp}${iteration}`,
+          gateway: 'BANK_TRANSFER',
+          amount: 200000,
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        },
+      });
+      const responses = await Promise.all(
+        [first, second].map((payment) =>
+          webhook({
+            orderRef: payment.orderRef,
+            gatewayTxnId: `race-${payment.id}`,
+            amount: 200000,
+            success: true,
+          }).expect(200),
+        ),
+      );
+      expect(responses.filter((response) => response.body.data.overpaid === true)).toHaveLength(1);
+      expect(
+        await prisma.paymentTransaction.count({ where: { invoiceId, status: 'SUCCESS' } }),
+      ).toBe(1);
+      expect(
+        await prisma.paymentTransaction.count({ where: { invoiceId, status: 'DISPUTED' } }),
+      ).toBe(1);
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status).toBe(
+        'PAID',
+      );
+    }
+  });
+
+  it('rejects item and aggregate monetary overflow with a controlled 400', async () => {
+    for (const items of [
+      [{ description: 'Oversized line', quantity: 3, unitAmount: 1000000000 }],
+      Array.from({ length: 3 }, () => ({
+        description: 'Aggregate overflow',
+        quantity: 1,
+        unitAmount: 1000000000,
+      })),
+    ]) {
+      await send(
+        'post',
+        '/api/v1/invoices',
+        { studentId: studentProfileId, type: 'OTHER', items },
+        adminToken,
+      ).expect(400);
+    }
+  });
+
+  it('attributes the student creation event to the authenticated administrator', async () => {
+    await app.get(AuditService).flush();
+    const actor = await prisma.user.findUniqueOrThrow({ where: { email: users.admin } });
+    const event = await prisma.auditLog.findFirstOrThrow({
+      where: {
+        event: 'student_profile_created',
+        detail: `student_profile:${studentProfileId}`,
+      },
+    });
+    expect(event.userId).toBe(actor.id);
+  });
+
+  it('preserves an expired incoming transfer as disputed until an administrator records its refund', async () => {
+    const invoiceId = await createUniformInvoice();
+    const qr = await qrRequest(invoiceId);
+    await prisma.paymentTransaction.update({
+      where: { orderRef: qr.orderRef },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const response = await webhook({
+      orderRef: qr.orderRef,
+      gatewayTxnId: `expired-${stamp}`,
+      amount: qr.amount,
+      success: true,
+    }).expect(200);
+    expect(response.body.data).toEqual({ processed: false, flagged: true });
+    const receipt = await prisma.paymentTransaction.findUniqueOrThrow({
+      where: { orderRef: qr.orderRef },
+    });
+    expect(receipt.status).toBe('DISPUTED');
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status).toBe(
+      'UNPAID',
+    );
+    await send(
+      'patch',
+      `/api/v1/payments/${receipt.id}`,
+      { status: 'REFUNDED', note: 'Synthetic refund recorded' },
+      studentToken,
+    ).expect(403);
+    await send(
+      'patch',
+      `/api/v1/payments/${receipt.id}`,
+      { status: 'REFUNDED', note: 'Synthetic refund recorded' },
+      adminToken,
+    ).expect(200);
+    await webhook({
+      orderRef: qr.orderRef,
+      gatewayTxnId: `expired-${stamp}`,
+      amount: qr.amount,
+      success: false,
+    }).expect(200);
+    expect(
+      (await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: receipt.id } })).status,
+    ).toBe('REFUNDED');
+  });
 
   beforeAll(async () => {
     if (process.env.DATABASE_URL === undefined || process.env.DATABASE_URL === '') {

@@ -36,7 +36,8 @@ export interface EnqueueInput {
 @Injectable()
 export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
-  private processing = false;
+  private activePass: Promise<void> | null = null;
+  private stopping = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -85,10 +86,12 @@ export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy 
     this.timer.unref();
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
+    this.stopping = true;
     if (this.timer !== undefined) {
       clearInterval(this.timer);
     }
+    await this.activePass;
   }
 
   /**
@@ -96,49 +99,67 @@ export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy 
    * passes cannot double-send; a crashed pass leaves SENDING rows that the next
    * boot treats as stale (claim guard below). Never throws into the interval.
    */
-  async runOnce(): Promise<void> {
-    if (this.processing) {
-      return;
-    }
-    this.processing = true;
+  runOnce(): Promise<void> {
+    if (this.stopping) return Promise.resolve();
+    this.activePass ??= this.processBatch().finally(() => {
+      this.activePass = null;
+    });
+    return this.activePass;
+  }
+
+  private async processBatch(): Promise<void> {
     try {
       const staleSendingBefore = new Date(Date.now() - 10 * 60_000);
-      // Rows stuck in SENDING (process died mid-send) go back to QUEUED after 10 min.
-      await this.prisma.notification.updateMany({
-        where: { status: 'SENDING', createdAt: { lt: staleSendingBefore } },
-        data: { status: 'QUEUED' },
-      });
       await this.prisma.notification.updateMany({
         where: {
-          status: 'QUEUED',
-          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }],
+          status: 'SENDING',
+          OR: [
+            { claimedAt: { lt: staleSendingBefore } },
+            { claimedAt: null, createdAt: { lt: staleSendingBefore } },
+          ],
         },
-        data: { status: 'SENDING' },
+        data: { status: 'QUEUED', claimedAt: null },
       });
-      const claimed = await this.prisma.notification.findMany({
-        where: { status: 'SENDING' },
-        orderBy: { createdAt: 'asc' },
-        take: 50,
-      });
-      for (const row of claimed) {
+      for (let attempt = 0; attempt < 50 && !this.stopping; attempt += 1) {
+        const row = await this.prisma.$transaction(async (tx) => {
+          const candidates = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM "notifications" WHERE status = 'QUEUED'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+            ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`;
+          const candidate = candidates[0];
+          if (candidate === undefined) return null;
+          await tx.notification.updateMany({
+            where: { id: candidate.id, status: 'QUEUED' },
+            data: { status: 'SENDING', claimedAt: new Date() },
+          });
+          return tx.notification.findUnique({ where: { id: candidate.id } });
+        });
+        if (row === null) break;
         await this.deliver(row);
       }
-    } catch (error) {
-      this.logger.error({ err: error }, 'notification_worker_pass_failed');
-    } finally {
-      this.processing = false;
+    } catch {
+      this.logger.error({}, 'notification_worker_pass_failed');
     }
   }
 
-  private channelChain(channel: NotificationChannel): ChannelSender[] {
+  private channelChain(
+    channel: NotificationChannel,
+  ): Array<{ channel: NotificationChannel; sender: ChannelSender }> {
     // Plan 7.6 fallback chain: ZNS -> SMS -> email. INAPP never enters the worker.
     switch (channel) {
       case 'ZNS':
-        return [this.zns, this.sms, this.mailSenderAdapter()];
+        return [
+          { channel: 'ZNS', sender: this.zns },
+          { channel: 'SMS', sender: this.sms },
+          { channel: 'EMAIL', sender: this.mailSenderAdapter() },
+        ];
       case 'SMS':
-        return [this.sms, this.mailSenderAdapter()];
+        return [
+          { channel: 'SMS', sender: this.sms },
+          { channel: 'EMAIL', sender: this.mailSenderAdapter() },
+        ];
       default:
-        return [this.mailSenderAdapter()];
+        return [{ channel: 'EMAIL', sender: this.mailSenderAdapter() }];
     }
   }
 
@@ -172,7 +193,7 @@ export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy 
       templateCode: row.templateCode,
       payload: (row.payload ?? {}) as Record<string, unknown>,
     };
-    for (const sender of this.channelChain(row.channel)) {
+    for (const { sender, channel } of this.channelChain(row.channel)) {
       try {
         await sender.send(message);
         await this.prisma.notification.update({
@@ -182,9 +203,10 @@ export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy 
             sentAt: new Date(),
             error: null,
             nextAttemptAt: null,
+            claimedAt: null,
             payload: {
               ...(message.payload ?? {}),
-              deliveredVia: row.channel,
+              deliveredVia: channel,
             } as Prisma.InputJsonValue,
           },
         });
@@ -193,17 +215,20 @@ export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy 
         if (error instanceof Error && error.name === 'UnconfiguredChannelError') {
           continue; // try the next channel in the fallback chain
         }
-        await this.recordFailure(row, error);
+        await this.recordFailure(row, 'Notification delivery failed');
         return;
       }
     }
     // Every chain link unconfigured: keep the row queued for the next pass
     // (config may arrive without a redeploy), counting it as a failure so the
     // bounded-retry cap still applies.
-    await this.recordFailure(row, new Error('no delivery channel available'));
+    await this.recordFailure(row, 'No delivery channel configured');
   }
 
-  private async recordFailure(row: { id: string; retries: number }, error: unknown): Promise<void> {
+  private async recordFailure(
+    row: { id: string; retries: number },
+    message: string,
+  ): Promise<void> {
     const retries = row.retries + 1;
     const exhausted = retries >= MAX_RETRIES;
     await this.prisma.notification.update({
@@ -211,8 +236,9 @@ export class NotificationOutboxService implements OnModuleInit, OnModuleDestroy 
       data: {
         status: (exhausted ? 'FAILED' : 'QUEUED') satisfies NotificationStatus,
         retries,
-        error: error instanceof Error ? error.message.slice(0, 500) : 'unknown delivery error',
-        nextAttemptAt: exhausted ? null : new Date(Date.now() + backoffMs(retries)),
+        error: message,
+        claimedAt: null,
+        nextAttemptAt: exhausted ? null : new Date(Date.now() + backoffMs(retries - 1)),
       },
     });
   }

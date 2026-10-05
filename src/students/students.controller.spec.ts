@@ -28,19 +28,19 @@ describe('StudentsController', () => {
     await controller.list(admin, { page: 1, limit: 20 });
     expect(service.list).toHaveBeenCalledWith(admin, { page: 1, limit: 20 });
 
-    await controller.create({ fullName: 'X', dob: '2010-01-01', gender: 'MALE' });
+    await controller.create(admin, { fullName: 'X', dob: '2010-01-01', gender: 'MALE' });
     expect(service.create).toHaveBeenCalled();
 
     await controller.getById(admin, 'sp-1');
     expect(service.getById).toHaveBeenCalledWith(admin, 'sp-1');
 
-    await controller.update('sp-1', { status: 'ACTIVE' });
-    expect(service.update).toHaveBeenCalledWith('sp-1', { status: 'ACTIVE' });
+    await controller.update(admin, 'sp-1', { status: 'ACTIVE' });
+    expect(service.update).toHaveBeenCalledWith(admin, 'sp-1', { status: 'ACTIVE' });
 
-    await controller.softDelete('sp-1');
-    expect(service.softDelete).toHaveBeenCalledWith('sp-1');
+    await controller.softDelete(admin, 'sp-1');
+    expect(service.softDelete).toHaveBeenCalledWith(admin, 'sp-1');
 
-    await controller.regenerateInviteCode('sp-1');
-    expect(service.regenerateInviteCode).toHaveBeenCalledWith('sp-1');
+    await controller.regenerateInviteCode(admin, 'sp-1');
+    expect(service.regenerateInviteCode).toHaveBeenCalledWith(admin, 'sp-1');
   });
 });

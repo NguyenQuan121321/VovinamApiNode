@@ -1,4 +1,5 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -90,21 +91,30 @@ export interface AuditEntry {
 }
 
 const BATCH_SIZE = 50;
+const MAX_QUEUE_SIZE = 10_000;
+const FLUSH_INTERVAL_MS = 5_000;
 
 /**
  * Async batched audit writes (plan 4.1). record() never awaits the database and
- * never throws into the request path; on flush failure queued entries are dropped
- * (with the failure visible in logs) rather than blocking traffic.
+ * never throws into the request path. Failed batches retain stable IDs for
+ * idempotent retry; bounded buffering and failures are observable without PII.
  */
 @Injectable()
-export class AuditService implements OnModuleDestroy {
+export class AuditService implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Prisma.AuditLogCreateManyInput[] = [];
   private flushPromise: Promise<void> | null = null;
+  private timer?: NodeJS.Timeout;
+  private readonly logger = new Logger(AuditService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
   record(entry: AuditEntry): void {
+    if (this.queue.length >= MAX_QUEUE_SIZE) {
+      this.logger.error({ event: 'audit_queue_capacity_exceeded', buffered: this.queue.length });
+      return;
+    }
     this.queue.push({
+      eventId: randomUUID(),
       userId: entry.userId,
       event: entry.event,
       ip: entry.ip,
@@ -118,15 +128,23 @@ export class AuditService implements OnModuleDestroy {
 
   /** Awaits the in-flight flush, then drains whatever is queued. */
   async flush(): Promise<void> {
-    if (this.flushPromise !== null) {
-      await this.flushPromise;
-      return;
+    if (this.flushPromise === null) {
+      this.startFlush();
     }
-    await this.drain();
+    await this.flushPromise;
+  }
+
+  onModuleInit(): void {
+    this.timer = setInterval(() => void this.flush(), FLUSH_INTERVAL_MS);
+    this.timer.unref();
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.timer !== undefined) clearInterval(this.timer);
     await this.flush();
+    if (this.queue.length > 0) {
+      this.logger.error({ event: 'audit_shutdown_pending', buffered: this.queue.length });
+    }
   }
 
   private startFlush(): void {
@@ -136,13 +154,15 @@ export class AuditService implements OnModuleDestroy {
   }
 
   private async drain(): Promise<void> {
-    try {
-      while (this.queue.length > 0) {
-        const batch = this.queue.splice(0, BATCH_SIZE);
-        await this.prisma.auditLog.createMany({ data: batch });
+    while (this.queue.length > 0) {
+      const batch = this.queue.splice(0, BATCH_SIZE);
+      try {
+        await this.prisma.auditLog.createMany({ data: batch, skipDuplicates: true });
+      } catch {
+        this.queue.unshift(...batch);
+        this.logger.error({ event: 'audit_flush_failed', buffered: this.queue.length });
+        return;
       }
-    } catch {
-      this.queue.length = 0;
     }
   }
 }

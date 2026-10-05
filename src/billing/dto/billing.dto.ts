@@ -18,7 +18,7 @@ import {
 import { PageDto } from '../../common/pagination.dto';
 
 export class CreateInvoiceItemDto {
-  @ApiProperty({ description: 'Line item description.', example: 'Học phí tháng 9/2026' })
+  @ApiProperty({ description: 'Line item description.', example: 'Tuition for September 2026' })
   @IsString()
   @MinLength(1)
   @MaxLength(255)
@@ -32,7 +32,8 @@ export class CreateInvoiceItemDto {
   quantity!: number;
 
   @ApiProperty({
-    description: 'Unit price in VND (integer); amount = quantity × unitAmount.',
+    description:
+      'Unit price in VND (integer). Each quantity × unitAmount and the invoice subtotal must not exceed 2147483647 VND; exceeding either bound returns 400.',
     example: 400000,
   })
   @Type(() => Number)
@@ -60,7 +61,7 @@ export class CreateInvoiceDto {
   type!: 'TUITION' | 'EXAM_FEE' | 'UNIFORM' | 'OTHER';
 
   @ApiProperty({
-    description: 'Line items (1..50).',
+    description: 'Line items (1..50). The sum of line amounts must not exceed 2147483647 VND.',
     type: CreateInvoiceItemDto,
     isArray: true,
     maxItems: 50,
@@ -92,7 +93,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description: 'Free-text note shown on the invoice.',
-    example: 'Võ phục mới',
+    example: 'New club uniform',
   })
   @IsOptional()
   @IsString()
@@ -123,7 +124,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'Active discount code ("khuyến mãi") resolved at creation time; its discount is added to any manual discount.',
+      'Active discount code resolved at creation time; its discount is added to any manual discount.',
     example: 'TET2026',
   })
   @IsOptional()
@@ -203,7 +204,7 @@ export class ConfirmCashDto {
 export class PaymentOutcomeDto {
   @ApiProperty({
     description:
-      'REFUNDED returns the money; DISPUTED marks the transfer as contested. Only SUCCESS payments qualify.',
+      'REFUNDED records an externally completed refund; this API does not initiate a bank transfer. SUCCESS or DISPUTED receipts may be refunded. Only SUCCESS receipts may be marked DISPUTED.',
     enum: ['REFUNDED', 'DISPUTED'],
     example: 'REFUNDED',
   })

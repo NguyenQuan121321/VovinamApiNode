@@ -18,8 +18,8 @@ import { enrichOpenApiDocument } from '../src/openapi/enrich-openapi';
  * database connection: module compilation is enough to build the document, so
  * DATABASE_URL only has to pass validation, never to answer.
  *
- * CI regenerates this file and fails when it is stale, then compares it against
- * the previous commit with oasdiff to block breaking changes.
+ * CI regenerates this file and fails when it is stale, then runs the same
+ * Spectral rules as local contract validation.
  */
 async function main(): Promise<void> {
   const app = await createApp();

@@ -1,5 +1,13 @@
 # VovinamApiNode — Database Baseline (TASK-02)
 
+Current amendment (2026-10-05): migration `20261005150000_acceptance_reliability`
+adds unique UUID audit event identifiers for retry deduplication and notification
+claim timestamps/indexes for worker lease recovery. The schema has nine migrations
+and 29 public tables including `_prisma_migrations`. No historical migration was
+rewritten and no financial/audit rows are removed. The original baseline below is
+dated; subsequent implementation and acceptance evidence supersede its counts and
+claims about missing endpoints. Billing settings now have MFA-protected ADMIN APIs.
+
 Baseline date: 2026-09-15. Status: **APPROVED** — authoritative database baseline for the thesis.
 Produced by TASK-02-DATABASE-RECONCILIATION.
 

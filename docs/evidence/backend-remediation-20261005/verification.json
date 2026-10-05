@@ -1,0 +1,133 @@
+{
+  "date": "2026-10-05",
+  "baseline": "1e174e8e9522ff41e823387c8f4dc194c829eb27",
+  "unit": {
+    "success": true,
+    "tests": 448,
+    "passed": 448,
+    "failed": 0,
+    "suites": 84
+  },
+  "integration": {
+    "success": true,
+    "tests": 107,
+    "passed": 107,
+    "failed": 0,
+    "suites": 17
+  },
+  "npmAudit": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "semgrep": {
+    "findings": 0,
+    "errors": 0,
+    "version": "1.178.0"
+  },
+  "trivy": {
+    "findings": 0,
+    "policy": "HIGH,CRITICAL; ignore-unfixed; bundled npm excluded"
+  },
+  "adapterFaults": {
+    "checks": [
+      {
+        "name": "audit retry after transient DB failure",
+        "expected": "retain failed batch or emit a failure signal",
+        "actual": {
+          "writeAttempts": 2,
+          "persisted": 1,
+          "queueLength": 0
+        },
+        "verdict": "PASS"
+      },
+      {
+        "name": "outbox retains/retries failed SMTP delivery",
+        "expected": "QUEUED with retries incremented (or FAILED when exhausted)",
+        "actual": {
+          "status": "QUEUED",
+          "retries": 1,
+          "loggedErrors": [
+            "mail_send_failed"
+          ]
+        },
+        "verdict": "PASS"
+      },
+      {
+        "name": "startup rejects missing required production configuration",
+        "verdict": "PASS",
+        "evidence": {
+          "rejected": true
+        }
+      }
+    ]
+  },
+  "containerSmoke": {
+    "image": "vovinam-remediation:local",
+    "identityNote": "Local build uses base SHA as a build argument; it is not a released source identity",
+    "checks": [
+      {
+        "route": "healthz",
+        "status": 200,
+        "body": {
+          "code": 200,
+          "message": "OK",
+          "data": {
+            "status": "ok"
+          }
+        }
+      },
+      {
+        "route": "readyz",
+        "status": 200,
+        "body": {
+          "code": 200,
+          "message": "OK",
+          "data": {
+            "status": "ok",
+            "database": "up"
+          }
+        }
+      },
+      {
+        "route": "version",
+        "status": 200,
+        "body": {
+          "code": 200,
+          "message": "OK",
+          "data": {
+            "commit": "1e174e8e9522ff41e823387c8f4dc194c829eb27"
+          }
+        }
+      }
+    ]
+  },
+  "containerStop": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-10-05T15:55:40.718137331Z",
+    "FinishedAt": "2026-10-05T15:57:30.454203786Z"
+  },
+  "restore": {
+    "seconds": 3,
+    "publicTables": 29,
+    "countsMatch": true,
+    "populatedTargetRejected": true
+  },
+  "hostedAuthenticatedUat": "BLOCKED",
+  "gitleaks": {
+    "version": "8.30.1",
+    "sourceSnapshotLeaks": 0,
+    "fullHistory": "CI pending"
+  }
+}

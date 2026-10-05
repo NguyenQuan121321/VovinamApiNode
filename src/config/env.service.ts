@@ -19,6 +19,14 @@ export class EnvService {
     return this.get('PORT');
   }
 
+  get buildSha(): string | undefined {
+    return this.getOptional('BUILD_SHA') ?? this.getOptional('RENDER_GIT_COMMIT');
+  }
+
+  get trustProxyHops(): number {
+    return this.get('TRUST_PROXY_HOPS');
+  }
+
   get databaseUrl(): string {
     return this.get('DATABASE_URL');
   }

@@ -9,7 +9,7 @@ describe('PrismaService', () => {
     const disconnect = jest.spyOn(service, '$disconnect').mockResolvedValue();
 
     await service.onModuleInit();
-    await service.onModuleDestroy();
+    await service.onApplicationShutdown();
 
     expect(connect).toHaveBeenCalledTimes(1);
     expect(disconnect).toHaveBeenCalledTimes(1);
